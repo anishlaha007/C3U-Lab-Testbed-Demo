@@ -204,7 +204,7 @@ export function LeftSidebar() {
           <div key={i} className="space-y-1 rounded border border-slate-200 p-1.5 dark:border-slate-800">
             <div className="flex items-center gap-1.5">
               <input type="color" className="h-5 w-6 cursor-pointer rounded border-0 bg-transparent p-0" value={d.color} onChange={(e) => set((c) => (c.drones[i].color = e.target.value))} />
-              <span className="text-xs font-semibold">Drone {DRONE_NAMES[i]}</span>
+              <span className="text-xs font-semibold whitespace-nowrap">Drone {DRONE_NAMES[i]}</span>
               <select
                 className="ml-auto rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] dark:border-slate-700 dark:bg-slate-900"
                 value={d.preset}

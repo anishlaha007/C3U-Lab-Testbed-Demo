@@ -9,7 +9,7 @@
  *     warning, not a block: the point of Aim 2 is to watch the filter save it.
  *  5. start positions match the drones' configured start positions within 0.1 m
  */
-import { ARENA_MARGIN, PRESETS } from './constants';
+import { ARENA_MARGIN, DRONE_NAMES, PRESETS } from './constants';
 import { checkFeasibility, type FeasibilityResult } from './feasibility';
 import { minPlannedSeparation } from './planned';
 import { dronesFor, type ScenarioBuild } from './scenario';
@@ -52,8 +52,8 @@ export function validate(cfg: SimConfig, b: ScenarioBuild): ValidationResult {
       if (!(dt > 0)) increasing = false;
       if (dt > maxDt) maxDt = dt;
     }
-    if (!increasing) issues.push({ check: 1, level: 'error', drone: i, message: `Drone ${i + 1}: time is not strictly increasing.` });
-    if (maxDt / b.k > 0.02 + 1e-9) issues.push({ check: 1, level: 'error', drone: i, message: `Drone ${i + 1}: sample period ${(1000 * maxDt / b.k).toFixed(1)} ms is coarser than 20 ms.` });
+    if (!increasing) issues.push({ check: 1, level: 'error', drone: i, message: `Drone ${DRONE_NAMES[i] ?? i + 1}: time is not strictly increasing.` });
+    if (maxDt / b.k > 0.02 + 1e-9) issues.push({ check: 1, level: 'error', drone: i, message: `Drone ${DRONE_NAMES[i] ?? i + 1}: sample period ${(1000 * maxDt / b.k).toFixed(1)} ms is coarser than 20 ms.` });
     // 2. arena
     let worst = -Infinity;
     let worstK = -1;
@@ -69,7 +69,7 @@ export function validate(cfg: SimConfig, b: ScenarioBuild): ValidationResult {
         check: 2,
         level: 'error',
         drone: i,
-        message: `Drone ${i + 1}: leaves the arena minus ${ARENA_MARGIN} m by ${(worst * 100).toFixed(0)} cm at t = ${(tr.t[worstK] / b.k).toFixed(2)} s (${tr.x[worstK].toFixed(2)}, ${tr.y[worstK].toFixed(2)}, ${tr.z[worstK].toFixed(2)}).`,
+        message: `Drone ${DRONE_NAMES[i] ?? i + 1}: leaves the arena minus ${ARENA_MARGIN} m by ${(worst * 100).toFixed(0)} cm at t = ${(tr.t[worstK] / b.k).toFixed(2)} s (${tr.x[worstK].toFixed(2)}, ${tr.y[worstK].toFixed(2)}, ${tr.z[worstK].toFixed(2)}).`,
       });
     }
     // 3. feasibility
@@ -81,14 +81,14 @@ export function validate(cfg: SimConfig, b: ScenarioBuild): ValidationResult {
         check: 3,
         level: cfg.flyAnyway ? 'warning' : 'error',
         drone: i,
-        message: `Drone ${i + 1}: ${(f.share * 100).toFixed(1)}% of samples exceed the thrust budget (peak ${f.peakThrust.toFixed(1)} m/s² vs ${(cfg.system.eta * twr * 9.81).toFixed(1)} usable, tilt ${f.peakTiltDeg.toFixed(0)}°).${cfg.flyAnyway ? ' Flying anyway: expect saturation.' : ' Enable "fly anyway" to run regardless.'}`,
+        message: `Drone ${DRONE_NAMES[i] ?? i + 1}: ${(f.share * 100).toFixed(1)}% of samples exceed the thrust budget (peak ${f.peakThrust.toFixed(1)} m/s² vs ${(cfg.system.eta * twr * 9.81).toFixed(1)} usable, tilt ${f.peakTiltDeg.toFixed(0)}°).${cfg.flyAnyway ? ' Flying anyway: expect saturation.' : ' Enable "fly anyway" to run regardless.'}`,
       });
     }
     // 5. start positions
     const st = drones[i].start;
     if (st) {
       const d = Math.hypot(st.x - tr.x[0], st.y - tr.y[0], st.z - tr.z[0]);
-      if (d > 0.1) issues.push({ check: 5, level: 'error', drone: i, message: `Drone ${i + 1}: start position is ${(d * 100).toFixed(0)} cm from the trajectory start (limit 10 cm).` });
+      if (d > 0.1) issues.push({ check: 5, level: 'error', drone: i, message: `Drone ${DRONE_NAMES[i] ?? i + 1}: start position is ${(d * 100).toFixed(0)} cm from the trajectory start (limit 10 cm).` });
     }
   });
   // 4. planned separation
@@ -99,7 +99,7 @@ export function validate(cfg: SimConfig, b: ScenarioBuild): ValidationResult {
       issues.push({
         check: 4,
         level: 'warning',
-        message: `Planned safety M17 = ${plannedSeparation.min.toFixed(2)} < 1 (drones ${plannedSeparation.i + 1} and ${plannedSeparation.j + 1} at t = ${plannedSeparation.t.toFixed(2)} s): the safety filter will have to intervene.`,
+        message: `Planned safety M17 = ${plannedSeparation.min.toFixed(2)} < 1 (drones ${DRONE_NAMES[plannedSeparation.i]} and ${DRONE_NAMES[plannedSeparation.j]} at t = ${plannedSeparation.t.toFixed(2)} s): the safety filter will have to intervene.`,
       });
     }
   }
