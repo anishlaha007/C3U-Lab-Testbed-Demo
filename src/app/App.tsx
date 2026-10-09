@@ -10,6 +10,7 @@ import { Timeline } from './panels/Timeline';
 import { Toasts } from './panels/Toasts';
 import { TopBar } from './panels/TopBar';
 import { SceneRoot } from './scene/SceneRoot';
+import { SpeedLegend } from './scene/SpeedLegend';
 import { planKey } from '../core/planners/plan';
 import { isRaceScenario } from '../core/race';
 import type { SimConfig } from '../core/types';
@@ -203,6 +204,7 @@ export default function App() {
         <main className="relative min-w-0 flex-1">
           <SceneRoot dark={dark} />
           <ViewHud />
+          <SpeedLegend />
           {mode !== 'sandbox' && (
             <Suspense fallback={null}>
               <MilestoneCard />

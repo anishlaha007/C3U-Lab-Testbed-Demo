@@ -1,6 +1,9 @@
 /** three.js canvas: lights, arena, cameras, course, drones, trails, overlays and camera rig. */
 import { Canvas, useFrame } from '@react-three/fiber';
-import { useSyncExternalStore } from 'react';
+import { EffectComposer, Vignette } from '@react-three/postprocessing';
+import { LensDistortionEffect } from 'postprocessing';
+import { useMemo, useSyncExternalStore } from 'react';
+import * as THREE from 'three';
 import { engine } from '../engine';
 import { useStore } from '../store';
 import { Arena } from './Arena';
@@ -46,7 +49,7 @@ function SceneContent({ dark }: { dark: boolean }) {
   const bg = dark ? '#070b14' : '#e8eef5';
   const n = build?.trajectories.length ?? 0;
   const colors = Array.from({ length: n }, (_, i) => config.drones[i]?.color ?? '#94a3b8');
-  const vmax = build ? Math.max(1, ...build.trajectories.map((tr) => maxSpeed(tr) * build.k)) : 2;
+  const vmax = trailSpeedMax();
   const hoverPreviews =
     hoverCell && plan && plan.candidates.length >= 2
       ? [plan.candidates[0][hoverCell[0]]?.preview, plan.candidates[1][hoverCell[1]]?.preview]
@@ -74,6 +77,29 @@ function SceneContent({ dark }: { dark: boolean }) {
   );
 }
 
+/** Highest planned speed of the current build: the top of the trail speed colour map. */
+export function trailSpeedMax(): number {
+  const build = engine.build;
+  return build ? Math.max(1, ...build.trajectories.map((tr) => maxSpeed(tr) * build.k)) : 2;
+}
+
+/**
+ * FPV lens: barrel distortion so the first-person view reads like real drone-racing footage. The
+ * focal length 1 / (1 + k) keeps the edge midpoints on the frame edges; the corners fall outside
+ * the source image and are masked, which together with the vignette gives the round fisheye look.
+ * Mounted only in FPV, so the other views render without a post-processing pass.
+ */
+function FpvLens() {
+  const k = 0.3;
+  const lens = useMemo(() => new LensDistortionEffect({ distortion: new THREE.Vector2(k, k), principalPoint: new THREE.Vector2(0, 0), focalLength: new THREE.Vector2(1 / (1 + k), 1 / (1 + k)) }), []);
+  return (
+    <EffectComposer multisampling={4}>
+      <primitive object={lens} />
+      <Vignette offset={0.25} darkness={0.65} />
+    </EffectComposer>
+  );
+}
+
 function maxSpeed(tr: { vx: Float64Array; vy: Float64Array; vz: Float64Array }): number {
   let m = 0;
   for (let i = 0; i < tr.vx.length; i += 5) m = Math.max(m, Math.hypot(tr.vx[i], tr.vy[i], tr.vz[i]));
@@ -82,6 +108,7 @@ function maxSpeed(tr: { vx: Float64Array; vy: Float64Array; vz: Float64Array }):
 
 export function SceneRoot({ dark }: { dark: boolean }) {
   const bg = dark ? '#070b14' : '#e8eef5';
+  const fpv = useStore((s) => s.camera === 'fpv');
   return (
     <Canvas shadows dpr={[1, 2]} camera={{ position: [5.5, 4.2, 6.5], fov: 45, near: 0.02, far: 200 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
       <color attach="background" args={[bg]} />
@@ -103,6 +130,7 @@ export function SceneRoot({ dark }: { dark: boolean }) {
       <EngineTicker />
       <SceneContent dark={dark} />
       <CameraRig />
+      {fpv && <FpvLens />}
     </Canvas>
   );
 }
