@@ -144,8 +144,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
   {
     id: 'T10',
     name: 'T10 Latency stress',
-    setup: 'Head-on at 3 m/s, 80 ms total latency, latency compensation off (toggle it on to compare)',
-    expect: 'The filter fails without compensation at high latency and holds with it (within physics limits).',
+    setup: 'Head-on at 3 m/s each, 2.5 m gap, 80 ms total latency, braking-aware CBF (alpha 5), latency compensation off (toggle it on to compare)',
+    expect: 'Without compensation the filter acts on 80 ms old states and the drones collide; with compensation it holds (no contact; at this delay small boundary dips remain, within physics limits).',
     apply: (c) => {
       drones(c, 2);
       c.scenario.type = 'headon';
@@ -153,8 +153,8 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       c.scenario.headonGap = 2.5;
       c.system.totalLatency = 0.08;
       c.filter.latencyCompensation = false;
-      c.filter.type = 'ecbf';
-      c.filter.lambda = 12;
+      c.filter.type = 'braking';
+      c.filter.alpha = 5;
       c.filter.deadlockBreaker = false;
     },
   },

@@ -571,6 +571,8 @@ export class Simulation {
         eta: sys.eta,
         thetaMax: (sys.thetaMaxDeg * Math.PI) / 180,
         pureAccelLimit: pure ? sys.pureAccelLimit : undefined,
+        dt: dtCtrl,
+        reactionTime: pure ? 0 : sys.tauA + dtCtrl / 2,
       });
       if (!this.filterWasEnabled) {
         // filter activation: check the exponential CBF initial condition (Ames et al. Thm 8)

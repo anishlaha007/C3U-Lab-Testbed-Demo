@@ -39,6 +39,10 @@ export interface FilterParams {
   pureAccelLimit?: number;
   /** Obstacles are included only within this distance (m). */
   obstacleRange?: number;
+  /** Control period (s): enables the braking-aware one-step look-ahead when not closing. */
+  dt?: number;
+  /** Braking-aware reaction time (s): actuation lag plus half a control period (0 in pure mode). */
+  reactionTime?: number;
 }
 
 export interface FilterResult {
@@ -119,7 +123,7 @@ export function runSafetyFilter(drones: FilterDrone[], obstacles: readonly Primi
         const L = Math.hypot(dp.x, dp.y, dp.z) || 1;
         const u = v3(dp.x / L, dp.y / L, dp.z / L);
         const aRel = cfg.brakingFraction * (capability(u, di.twr) + capability(v3(-u.x, -u.y, -u.z), dj.twr));
-        const r = brakingPair(i, j, di.p, di.v, dj.p, dj.v, D, aRel, cfg.alpha);
+        const r = brakingPair(i, j, di.p, di.v, dj.p, dj.v, D, aRel, cfg.alpha, prm.dt ?? 0, prm.reactionTime ?? 0);
         pairH[k] = r.h;
         if (r.constraint) constraints.push(r.constraint);
       }
@@ -140,7 +144,7 @@ export function runSafetyFilter(drones: FilterDrone[], obstacles: readonly Primi
         const Rtot = c.R + DRONE_RADIUS + margin;
         let con: LinearConstraint | null;
         if (cfg.type === 'ecbf') con = ecbfObstacle(i, di.p, di.v, c, Rtot, cfg.obstacleLambda);
-        else con = brakingObstacle(i, di.p, di.v, c, Rtot, cfg.brakingFraction * Math.max(0.5, capability(c.n, di.twr)), cfg.obstacleAlpha);
+        else con = brakingObstacle(i, di.p, di.v, c, Rtot, cfg.brakingFraction * Math.max(0.5, capability(c.n, di.twr)), cfg.obstacleAlpha, prm.dt ?? 0, prm.reactionTime ?? 0);
         if (con) {
           con.label = prim.tag.id;
           constraints.push(con);

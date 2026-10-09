@@ -96,6 +96,36 @@ describe('braking-aware CBF', () => {
     // closing at 6 m/s from 1 m needs more than the 12 m/s^2 budget: h_b < 0
     expect(r.h).toBeLessThan(0);
   });
+
+  it('sampled-data look-ahead: at rest near the boundary a large inward input is limited', () => {
+    // drones at rest 0.25 m apart (s ~ 1.04, 1 cm of room), nominal pushing 10 m/s^2 into each
+    // other for a whole 20 ms tick: the continuous-time barrier is void at d' = 0, the
+    // look-ahead is not (0.4 m/s closing cannot be stopped within 1 cm)
+    const D = pairD(1);
+    const pi = v3(0, 0, 1);
+    const pj = v3(0.25, 0, 1);
+    expect(brakingPair(0, 1, pi, v3(), pj, v3(), D, 12, 5).constraint).toBeNull();
+    const r = brakingPair(0, 1, pi, v3(), pj, v3(), D, 12, 5, 0.02, 0.04);
+    expect(r.constraint).not.toBeNull();
+    const c = r.constraint!;
+    const uI = v3(10, 0, 0);
+    const uJ = v3(-10, 0, 0);
+    const lhs = c.a.x * (uI.x - uJ.x) + c.a.y * (uI.y - uJ.y) + c.a.z * (uI.z - uJ.z);
+    expect(lhs).toBeLessThan(c.b);
+    // a mild inward drift that can still be stopped is allowed
+    const lhsMild = c.a.x * 2 + 0;
+    expect(lhsMild).toBeGreaterThanOrEqual(c.b);
+  });
+
+  it('reaction distance keeps the barrier active as the closing speed goes to zero', () => {
+    const D = pairD(1);
+    const pi = v3(0, 0, 1);
+    const pj = v3(0.3, 0, 1);
+    const slow = brakingPair(0, 1, pi, v3(0.01, 0, 0), pj, v3(-0.01, 0, 0), D, 12, 5, 0.02, 0.04).constraint!;
+    const slowNoReaction = brakingPair(0, 1, pi, v3(0.01, 0, 0), pj, v3(-0.01, 0, 0), D, 12, 5).constraint!;
+    // c0 = tau_r - d'/a_b >= tau_r: the input coefficient no longer vanishes
+    expect(Math.hypot(slow.a.x, slow.a.y, slow.a.z)).toBeGreaterThan(10 * Math.hypot(slowNoReaction.a.x, slowNoReaction.a.y, slowNoReaction.a.z));
+  });
 });
 
 describe('Hildreth QP (Section 8.3)', () => {
