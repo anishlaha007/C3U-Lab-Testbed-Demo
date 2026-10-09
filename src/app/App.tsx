@@ -8,6 +8,10 @@ import { Timeline } from './panels/Timeline';
 import { Toasts } from './panels/Toasts';
 import { TopBar } from './panels/TopBar';
 import { SceneRoot } from './scene/SceneRoot';
+import { planKey } from '../core/planners/plan';
+import { isRaceScenario } from '../core/race';
+import type { SimConfig } from '../core/types';
+import { requestSolve } from './planner';
 import { configFromHash, takeScreenshot } from './share';
 import { conditionLabel, useStore, type CameraMode } from './store';
 import { cx } from './ui';
@@ -20,12 +24,23 @@ function EngineSync() {
   const config = useStore((s) => s.config);
   const plan = useStore((s) => s.plan);
   const timer = useRef<number | null>(null);
+  const lastLoad = useRef<{ config: SimConfig | null; planKey: string | null }>({ config: null, planKey: null });
   useEffect(() => {
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
-      const usePlan = plan && PLANNER_TYPES.includes(config.scenario.type) ? plan : null;
-      engine.load(config, usePlan);
+      const current = plan && plan.key === planKey(config) ? plan : null;
+      const sameConfig = lastLoad.current.config === config;
+      // a plan arriving while a trial is flying waits for the next reset instead of interrupting it
+      if (sameConfig && current && (engine.status === 'running' || engine.status === 'paused')) {
+        useStore.getState().toast('New plan ready: press Reset (R) to fly it.', 'info');
+        return;
+      }
+      if (sameConfig && (current?.key ?? null) === lastLoad.current.planKey) return;
+      lastLoad.current = { config, planKey: current?.key ?? null };
+      engine.load(config, current);
       useStore.getState().bump();
+      // race scenarios: solve the game in the background when the plan is missing or stale
+      if (isRaceScenario(config) && !current) void requestSolve(true);
     }, 120);
     return () => {
       if (timer.current) window.clearTimeout(timer.current);

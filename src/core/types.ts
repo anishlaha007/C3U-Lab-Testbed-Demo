@@ -296,6 +296,11 @@ export interface PlannerConfig {
   replanDt: number;
   /** Swap the start sides of drones A and B (race series alternate start positions). */
   swapStarts: boolean;
+  /**
+   * Scaled separation below which rollouts count collision risk. 1 is the strict definition of
+   * Section 7.2; the default 1.25 keeps a buffer for tracking error so plans do not graze.
+   */
+  riskMargin: number;
 }
 
 export interface SimConfig {
@@ -336,6 +341,7 @@ export type SimEventType =
   | 'lap'
   | 'ecbfInitWarning'
   | 'finish'
+  | 'replan'
   | 'end';
 
 export interface SimEvent {
@@ -452,6 +458,9 @@ export interface TrialSummary {
   clippedTicks: number;
   /** Number of control ticks in the analysis window. */
   ctrlTicks: number;
+  /** Receding-horizon re-plans executed and their worst solve time (ms). */
+  replans: number;
+  replanMsMax: number;
 }
 
 export interface PlannedInfo {
@@ -474,6 +483,8 @@ export interface PlannedInfo {
   /** Prediction from the planner (M20). */
   predictedGap?: number;
   predictedWinner?: number;
+  /** Horizon of the planner's prediction (s): the realised gap is compared at this time (M20). */
+  predictionHorizon?: number;
 }
 
 export interface TrialLog {

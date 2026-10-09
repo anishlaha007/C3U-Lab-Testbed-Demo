@@ -52,16 +52,21 @@ export function brakeSetpoint(pHat: Vec3, vHat: Vec3, aMax: number, yaw: number)
 
 /**
  * Predict whether the pair will violate s < 1 within `horizon` seconds when both drones apply
- * their safe commands (double-integrator rollout at 5 ms).
+ * their safe commands (double-integrator rollout at 5 ms). Only closing pairs count, and the
+ * prediction must fall below `threshold` (default 0.98): a CBF legitimately rides the boundary
+ * s = 1 and a constant-input extrapolation of that motion dips marginally under it.
  */
-export function predictViolation(pi: Vec3, vi: Vec3, ui: Vec3, pj: Vec3, vj: Vec3, uj: Vec3, D: Vec3, horizon = 0.1): boolean {
+export function predictViolation(pi: Vec3, vi: Vec3, ui: Vec3, pj: Vec3, vj: Vec3, uj: Vec3, D: Vec3, horizon = 0.1, threshold = 0.98): boolean {
+  const closing = (pi.x - pj.x) * D.x * (vi.x - vj.x) + (pi.y - pj.y) * D.y * (vi.y - vj.y) + (pi.z - pj.z) * D.z * (vi.z - vj.z) < 0;
+  if (!closing) return false;
+  const th2 = threshold * threshold;
   const dt = 0.005;
   for (let t = dt; t <= horizon + 1e-9; t += dt) {
     const h = 0.5 * t * t;
     const dx = pi.x - pj.x + (vi.x - vj.x) * t + (ui.x - uj.x) * h;
     const dy = pi.y - pj.y + (vi.y - vj.y) * t + (ui.y - uj.y) * h;
     const dz = pi.z - pj.z + (vi.z - vj.z) * t + (ui.z - uj.z) * h;
-    if (dx * dx * D.x + dy * dy * D.y + dz * dz * D.z < 1) return true;
+    if (dx * dx * D.x + dy * dy * D.y + dz * dz * D.z < th2) return true;
   }
   return false;
 }

@@ -21,7 +21,9 @@ import { Executor } from './executor';
 import { distanceToPrimitive, nearBounds, primitiveBounds, type Primitive } from './geometry';
 import { OnboardController } from './onboard';
 import { computePlanned, plannedEffortUpTo } from './planned';
+import { replanFromState } from './planners/replan';
 import { ProgressTracker } from './planners/track';
+import { raceSetup } from './race';
 import { deriveSeed, Rng } from './rng';
 import { pairD, scaledSeparation } from './safety/ecbf';
 import { pairIndex, pairList, runSafetyFilter, type FilterDrone, type FilterResult } from './safety/filter';
@@ -129,6 +131,8 @@ const EMPTY_SUMMARY = (): TrialLog['summary'] => ({
   ecbfInitWarnings: 0,
   clippedTicks: 0,
   ctrlTicks: 0,
+  replans: 0,
+  replanMsMax: 0,
 });
 
 function emptyDroneLog(): DroneLog {
@@ -189,6 +193,8 @@ export class Simulation {
   private readonly noLog: boolean;
   private filterWasEnabled = false;
   private infeasibleTicks = 0;
+  private lastReplan = 0;
+  private replanRound = 0;
   /** Pure double-integrator mode with the reference (control-rate, semi-implicit) discretisation. */
   private readonly pureRef: boolean;
 
@@ -435,6 +441,29 @@ export class Simulation {
 
   private endReasonPending: TrialLog['summary']['endReason'] | null = null;
 
+  private replan(t: number): void {
+    this.lastReplan = t;
+    const setup = raceSetup(this.cfg);
+    if (!setup) return;
+    const res = replanFromState(
+      this.cfg,
+      setup,
+      this.drones.map((d) => ({ p: d.ground.p, v: d.ground.v, progress: d.progress ? d.progress.progress : 0, active: !d.crashed && d.mode === 'normal' })),
+      t,
+      this.replanRound++,
+    );
+    if (!res) return;
+    res.trajectories.forEach((tr, i) => {
+      if (!tr) return;
+      const d = this.drones[i];
+      d.exec.replaceTrajectory(tr, t);
+      d.exec.mode = 'nominal';
+    });
+    this.log.summary.replans++;
+    this.log.summary.replanMsMax = Math.max(this.log.summary.replanMsMax, res.solveMs);
+    this.event('replan', { detail: `${res.solveMs.toFixed(0)} ms` });
+  }
+
   private pureRefStep(d: SimDrone, T: number): void {
     const s = d.state;
     let a = d.aCmd;
@@ -517,6 +546,9 @@ export class Simulation {
     const tRace = t;
     const filterOn = fcfg.enabled && !uploaded;
     const comp = filterOn && fcfg.latencyCompensation;
+
+    // receding-horizon re-planning (stretch): re-solve the game from the current state
+    if (cfg.planner.replan && !pure && t > 0.2 && t < this.raceEnd - 0.5 && t - this.lastReplan >= cfg.planner.replanDt - 1e-9) this.replan(t);
 
     const preds = this.drones.map((d) => (comp ? this.predict(d, t) : { p: { ...d.ground.p }, v: { ...d.ground.v } }));
     const cands = this.drones.map((d) => d.exec.candidate(tRace));

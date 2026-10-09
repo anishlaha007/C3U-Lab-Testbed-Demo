@@ -28,7 +28,7 @@ export interface ScenarioBuild {
   /** Start planes for lap timing (null if not periodic). */
   lapPlanes: ({ p: Vec3; n: Vec3 } | null)[];
   /** Planner prediction (M20). */
-  prediction?: { gap: number; winner: number };
+  prediction?: { gap: number; winner: number; horizon?: number };
   /** Racing-line length (M27). */
   lineLength: number;
   /** Raw obstacle-detour search paths (teaching view). */
@@ -40,7 +40,7 @@ export interface BuildOverrides {
   trajectories?: Trajectory[];
   course?: Course | null;
   track?: Track | null;
-  prediction?: { gap: number; winner: number };
+  prediction?: { gap: number; winner: number; horizon?: number };
 }
 
 export { dronesFor };
@@ -146,7 +146,14 @@ function raceBuild(cfg: SimConfig, name: string): ReturnType<ScenarioBuilder> {
 
 export function buildScenario(cfg: SimConfig, ov: BuildOverrides = {}): ScenarioBuild {
   const builder = BUILDERS[cfg.scenario.type] ?? BUILDERS.figure8!;
-  const base = ov.trajectories ? null : builder(cfg);
+  // with overridden trajectories (a solved plan) race scenarios still need their course and
+  // track (gates, progress); other scenarios have neither
+  let base: ReturnType<ScenarioBuilder> | null = null;
+  if (!ov.trajectories) base = builder(cfg);
+  else {
+    const setup = raceSetup(cfg);
+    if (setup) base = { name: `${cfg.scenario.type === 'pinch' ? 'Pinch' : cfg.scenario.type === 'raceTrack' ? 'Race loop' : 'Ring course'}: ${setup.course.name}`, trajectories: ov.trajectories, course: setup.course, track: setup.track, notes: [], lineLength: setup.lineLength, searchPaths: setup.searchPaths };
+  }
   const trajectories = ov.trajectories ?? base!.trajectories;
   const course = ov.course !== undefined ? ov.course : (base?.course ?? null);
   const track = ov.track !== undefined ? ov.track : (base?.track ?? null);
@@ -163,7 +170,7 @@ export function buildScenario(cfg: SimConfig, ov: BuildOverrides = {}): Scenario
     return { p, n: v3(tr.vx[0] / vn, tr.vy[0] / vn, tr.vz[0] / vn) };
   });
   return {
-    name: base?.name ?? 'Imported',
+    name: base?.name ?? (cfg.scenario.type === 'imported' ? 'Imported' : cfg.scenario.type),
     trajectories,
     k: cfg.scenario.timeScale > 0 ? cfg.scenario.timeScale : 1,
     course,

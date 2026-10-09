@@ -474,7 +474,8 @@ export function buildRacingLine(course: Course, o: RacingLineOptions): RacingLin
     const last = pts[pts.length - 1];
     const nl = v3(last.x - pts[pts.length - 2].x, last.y - pts[pts.length - 2].y, last.z - pts[pts.length - 2].z);
     const ll = Math.hypot(nl.x, nl.y, nl.z) || 1;
-    const end = clampArena(v3(last.x + (1.2 * nl.x) / ll, last.y + (1.2 * nl.y) / ll, last.z + (1.2 * nl.z) / ll), o.arena);
+    // end well inside the nets: the drone decelerates to rest here and may overshoot slightly
+    const end = clampArena(v3(last.x + (1.2 * nl.x) / ll, last.y + (1.2 * nl.y) / ll, last.z + (1.2 * nl.z) / ll), o.arena, 0.9);
     pts = [start, ...pts, end];
     fixed = [true, ...fixed, true];
     roles = [null, ...roles, null];

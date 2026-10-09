@@ -46,6 +46,12 @@ export interface CandidateOptions {
   clearance?: number;
   droneId?: number;
   label?: string;
+  /** Path length to cover (m); default: all laps (closed) or to the end of the track (open). */
+  total?: number;
+  /** Initial speed (m/s); default: flying start at the cruise cap. */
+  v0?: number;
+  /** End at rest (open tracks always do). */
+  stopAtEnd?: boolean;
 }
 
 /** Smooth periodic (closed) or clamped (open) interpolation of K control values across [0, L]. */
@@ -73,7 +79,7 @@ export function profileValue(ctrl: number[], s: number, L: number, closed: boole
 /** Offset path for a candidate over `laps` laps (closed) or the whole track (open). */
 export function candidatePath(track: Track, spec: CandidateSpec, opts: CandidateOptions): Vec3[] {
   const L = track.length;
-  const total = track.closed ? L * opts.laps : L - opts.startS;
+  const total = opts.total ?? (track.closed ? L * opts.laps : L - opts.startS);
   const ds = 0.05;
   const n = Math.max(3, Math.round(total / ds) + 1);
   const blend = opts.startBlend ?? Math.min(1.5, 0.3 * L);
@@ -258,7 +264,7 @@ export function buildCandidate(track: Track, spec: CandidateSpec, lim: DroneLimi
   const raw = candidatePath(track, spec, opts);
   const { pts, ds } = resampleUniform(raw, 0.05);
   const aMax = planningAccel(lim);
-  const vProf = speedProfile(pts, ds, aMax, lim.vCap, { closed: false, v0: lim.vCap, vEnd: track.closed ? lim.vCap : 0 });
+  const vProf = speedProfile(pts, ds, aMax, lim.vCap, { closed: false, v0: opts.v0 ?? lim.vCap, vEnd: track.closed && !opts.stopAtEnd ? lim.vCap : 0 });
   const scaled = vProf.map((x) => x * spec.speed);
   let traj = pathToTrajectory(pts, ds, scaled, defaultMeta({ drone_id: opts.droneId ?? 0, strategy: opts.label ?? candidateLabel(spec), solver: 'candidate', track_id: track.id }));
   // time-scale down until feasible

@@ -63,8 +63,8 @@ export function gateFactor(log: TrialLog, isCourse: boolean): { G: number; reaso
   if (s.killed) return { G: 0, reason: 'kill' };
   if (isCourse && s.gates.some((g) => g.misses > 0)) return { G: 0, reason: 'missed gate' };
   if (s.emergencies > 0) return { G: 0.5, reason: 'emergency brake' };
+  if (s.geofenceEvents > 0) return { G: 0.5, reason: 'geofence hover (supervisor)' };
   if (s.violationTime > 0) return { G: 0.75, reason: 'separation violation' };
-  if (s.geofenceEvents > 0) return { G: 0, reason: 'geofence (left the flight volume)' };
   return { G: 1, reason: 'clean' };
 }
 

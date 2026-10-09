@@ -81,5 +81,6 @@ export function computePlanned(cfg: SimConfig, b: ScenarioBuild): PlannedInfo {
     lineLength: b.lineLength,
     predictedGap: b.prediction?.gap,
     predictedWinner: b.prediction?.winner,
+    predictionHorizon: b.prediction?.horizon,
   };
 }

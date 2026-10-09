@@ -55,6 +55,8 @@ function baseLog(drones: DroneLog[], n: number, dt = 0.02): TrialLog {
       ecbfInitWarnings: 0,
       clippedTicks: 0,
       ctrlTicks: n,
+      replans: 0,
+      replanMsMax: 0,
     },
     planned: { lapTime: drones.map(() => 4.0), laps: drones.map(() => 1), arrival: drones.map(() => NaN), effort: drones.map(() => 18), feasibilityFail: drones.map(() => 0.1), minPlannedSeparation: 0.8, duration: (n - 1) * dt, lineLength: 8 },
     trackLength: NaN,

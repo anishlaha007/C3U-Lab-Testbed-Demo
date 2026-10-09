@@ -55,6 +55,7 @@ export function defaultConfig(): SimConfig {
       replan: false,
       replanDt: 0.5,
       swapStarts: false,
+      riskMargin: 1.25,
     },
     system: {
       totalLatency: 0.025,

@@ -5,7 +5,7 @@ import { COURSE_INFO } from '../../core/courses';
 import { latencies } from '../../core/defaults';
 import { figure8MaxW } from '../../core/trajectories/figure8';
 import type { SimConfig, TrajectoryType } from '../../core/types';
-import { requestSolve } from '../planner';
+import { planIsCurrent, requestSolve } from '../planner';
 import { useStore } from '../store';
 import { Badge, Button, Label, Section, Select, Slider, Toggle, cx, fmt } from '../ui';
 
@@ -33,6 +33,7 @@ export function LeftSidebar() {
   const visuals = useStore((s) => s.visuals);
   const setVisuals = useStore((s) => s.setVisuals);
   const planStatus = useStore((s) => s.planStatus);
+  const planProgress = useStore((s) => s.planProgress);
   const plan = useStore((s) => s.plan);
   const setEditorOpen = useStore((s) => s.setEditorOpen);
   const sc = config.scenario;
@@ -275,12 +276,23 @@ export function LeftSidebar() {
           onChange={(v) => set((c) => (c.planner.responsibility = v))}
         />
         <Slider label="Collision penalty P" tip="Metres of progress lost per second of separation violation in the rollout." value={pl.penalty} min={0} max={200} step={5} format={(v) => `${v} m/s`} onChange={(v) => set((c) => (c.planner.penalty = v))} />
+        <Slider
+          label="Risk margin s"
+          tip="Rollouts count time with scaled separation below this as collision risk (1 = strict definition; 1.25 leaves a buffer for tracking error)."
+          value={pl.riskMargin}
+          min={1}
+          max={1.6}
+          step={0.05}
+          format={(v) => v.toFixed(2)}
+          onChange={(v) => set((c) => (c.planner.riskMargin = v))}
+        />
         <Toggle label="Receding-horizon re-planning (stretch)" tip="Re-solve from the current state every 0.5 s instead of flying the precomputed plan." value={pl.replan} onChange={(v) => set((c) => (c.planner.replan = v))} />
         <div className="flex items-center gap-2">
           <Button small kind="primary" disabled={!isPlanner || planStatus === 'solving'} onClick={() => requestSolve()}>
-            {planStatus === 'solving' ? 'Solving…' : 'Solve'}
+            {planStatus === 'solving' ? `Solving ${(planProgress * 100).toFixed(0)}%` : 'Solve'}
           </Button>
-          {plan && <span className="text-[10px] text-slate-500">solved in {fmt(plan.solveMs, 0)} ms</span>}
+          {plan && planIsCurrent(config) && <span className="text-[10px] text-slate-500">solved in {fmt(plan.solveMs, 0)} ms</span>}
+          {plan && !planIsCurrent(config) && isPlanner && <span className="text-[10px] text-amber-500">plan out of date</span>}
         </div>
       </Section>
 

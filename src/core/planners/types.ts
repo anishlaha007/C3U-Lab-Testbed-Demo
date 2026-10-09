@@ -29,6 +29,8 @@ export interface GameMatrix {
   gap: number[][];
   /** Collision risk (s of violation) per cell. */
   risk: number[][];
+  /** Total progress s1(T) + s2(T) per cell (tie-break). */
+  total: number[][];
   /** Best responses: br1[j] = drone 1's best reply to drone 2's j; br2[i] = drone 2's best reply to i. */
   br1: number[];
   br2: number[];
@@ -36,6 +38,7 @@ export interface GameMatrix {
   nash: [number, number][];
   /** Stackelberg picks per leader (drone 0 leads / drone 1 leads). */
   stackelberg: { leader: number; i: number; j: number }[];
+  /** Rollout horizon T (s). */
   horizon: number;
 }
 
@@ -47,8 +50,10 @@ export interface PlanResult {
   trajectories: Trajectory[];
   candidates: Candidate[][];
   game: GameMatrix | null;
-  prediction: { gap: number; winner: number };
+  prediction: { gap: number; winner: number; horizon: number };
   solveMs: number;
   note: string;
   trackId: string;
+  /** planKey() of the configuration the plan was solved for. */
+  key: string;
 }

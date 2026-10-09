@@ -152,7 +152,7 @@ export const useStore = create<StoreState>((set, get) => ({
   replaceConfig: (c) => set({ config: cloneConfig(c) }),
   applyPreset: (id) => {
     const seed = get().config.seed;
-    set({ config: presetConfig(id, seed), plan: null, planStatus: 'idle' });
+    set({ config: presetConfig(id, seed) });
   },
   setMode: (m) => set({ mode: m, narrationStep: 0 }),
   toggleDark: () => set({ dark: !get().dark }),

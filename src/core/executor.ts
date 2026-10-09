@@ -41,8 +41,11 @@ export class Executor {
   /** Last setpoint sent. */
   last: Setpoint | null = null;
 
+  /** Race time at which the current trajectory's t = 0 applies (receding-horizon re-planning). */
+  tOffset = 0;
+
   constructor(
-    readonly traj: Trajectory,
+    public traj: Trajectory,
     readonly k: number,
     readonly controller: ControllerType,
     /** Pure double-integrator mode: u_nom is the planned acceleration only. */
@@ -50,7 +53,13 @@ export class Executor {
   ) {}
 
   nominal(tRace: number): Setpoint {
-    return sampleScaled(this.traj, tRace, this.k);
+    return sampleScaled(this.traj, tRace - this.tOffset, this.k);
+  }
+
+  /** Switch to a new trajectory whose t = 0 is race time tStart (re-planning). */
+  replaceTrajectory(traj: Trajectory, tStart: number): void {
+    this.traj = traj;
+    this.tOffset = tStart;
   }
 
   /** Gentle return of the filtered reference towards the plan (critically damped, ~0.5 s). */

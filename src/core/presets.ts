@@ -24,6 +24,7 @@ function course(c: SimConfig, id: CourseId, n: number): void {
   c.course.courseId = id;
   c.scenario.timeScale = 1;
   c.scenario.targetSpeed = recommendedSpeed(c.course);
+  c.scenario.laps = 1;
 }
 
 export const SCENARIO_PRESETS: ScenarioPreset[] = [
