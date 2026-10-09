@@ -33,8 +33,9 @@ Node 20.19+ or 22.12+ is required (Vite 7). There is no backend: the build is a 
 
 `vite.config.ts` uses `base: './'`, so `dist/` works from any sub-path.
 
-- **GitHub Pages:** build, then publish `dist/` (for example with the `peaceiris/actions-gh-pages` action
-  or by pushing `dist/` to a `gh-pages` branch).
+- **GitHub Pages:** enable Pages with "GitHub Actions" as the source (Settings → Pages), then run the
+  **Deploy to GitHub Pages** workflow from the Actions tab (`.github/workflows/deploy-pages.yml`; it tests,
+  builds and publishes `dist/`). CI (`ci.yml`) tests and builds every push.
 - **Vercel / Netlify:** framework preset "Vite", build command `npm run build`, output directory `dist`.
 - **Any file server:** copy `dist/` anywhere; open `index.html` through a web server (Web Workers do not
   load from `file://`).
