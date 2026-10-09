@@ -178,6 +178,8 @@ export interface ScenarioParams {
   headonSpeed: number;
   /** Head-on start gap (m). */
   headonGap: number;
+  /** Head-on preliminary-study variant: coast with zero planned acceleration (pure DI tests). */
+  headonCoast: boolean;
   /** Target speed for spline-based trajectories (m/s). */
   targetSpeed: number;
   /** Speed multiplier k: t -> t / k. */
@@ -238,6 +240,12 @@ export interface SystemConfig {
   pureDoubleIntegrator: boolean;
   /** Acceleration limit used in pure double-integrator mode (m/s^2). */
   pureAccelLimit: number;
+  /**
+   * Discretisation of the pure double-integrator mode: 'reference' reproduces the preliminary
+   * study (semi-implicit Euler at the control period, delay rounded down to whole control
+   * periods); 'exact' integrates the zero-order hold exactly at 1 ms with the exact delay.
+   */
+  pureDiscretization: 'reference' | 'exact';
 }
 
 export type FilterType = 'ecbf' | 'braking';
@@ -262,6 +270,11 @@ export interface FilterConfig {
   gateMargin: number;
   /** Supervisor emergency brake on infeasible / imminent violation. */
   emergencyBrake: boolean;
+  /**
+   * Symmetric-deadlock breaker: for closing pairs in conflict, bias the nominal inputs by a small
+   * right-hand-rule term so that one drone yields (after Wang, Ames, Egerstedt 2017).
+   */
+  deadlockBreaker: boolean;
   /** Supervisor geofence hover. */
   geofence: boolean;
 }
@@ -438,6 +451,10 @@ export interface TrialSummary {
 export interface PlannedInfo {
   /** Planned lap time per drone (s) (scaled), NaN if not periodic. */
   lapTime: number[];
+  /** Laps contained in each planned trajectory (0 if not periodic). */
+  laps: number[];
+  /** Planned arrival time at the final point per drone (s, scaled). */
+  arrival: number[];
   /** Planned effort per drone (integral |a_ref + g e_z| dt) (m/s). */
   effort: number[];
   /** Share of planned samples failing the thrust/tilt check (M9). */
