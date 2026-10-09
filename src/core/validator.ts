@@ -53,6 +53,10 @@ export function validate(cfg: SimConfig, b: ScenarioBuild): ValidationResult {
       if (dt > maxDt) maxDt = dt;
     }
     if (!increasing) issues.push({ check: 1, level: 'error', drone: i, message: `Drone ${DRONE_NAMES[i] ?? i + 1}: time is not strictly increasing.` });
+    // every sample must be finite (a NaN would silently pass the comparisons below)
+    const cols = [tr.t, tr.x, tr.y, tr.z, tr.vx, tr.vy, tr.vz, tr.ax, tr.ay, tr.az] as const;
+    const bad = tr.t.findIndex((_, k) => cols.some((c) => !Number.isFinite(c[k])));
+    if (bad >= 0) issues.push({ check: 1, level: 'error', drone: i, message: `Drone ${DRONE_NAMES[i] ?? i + 1}: sample ${bad} contains a value that is not a finite number.` });
     if (maxDt / b.k > 0.02 + 1e-9) issues.push({ check: 1, level: 'error', drone: i, message: `Drone ${DRONE_NAMES[i] ?? i + 1}: sample period ${(1000 * maxDt / b.k).toFixed(1)} ms is coarser than 20 ms.` });
     // 2. arena
     let worst = -Infinity;
@@ -88,7 +92,7 @@ export function validate(cfg: SimConfig, b: ScenarioBuild): ValidationResult {
     const st = drones[i].start;
     if (st) {
       const d = Math.hypot(st.x - tr.x[0], st.y - tr.y[0], st.z - tr.z[0]);
-      if (d > 0.1) issues.push({ check: 5, level: 'error', drone: i, message: `Drone ${DRONE_NAMES[i] ?? i + 1}: start position is ${(d * 100).toFixed(0)} cm from the trajectory start (limit 10 cm).` });
+      if (!(d <= 0.1)) issues.push({ check: 5, level: 'error', drone: i, message: `Drone ${DRONE_NAMES[i] ?? i + 1}: start position is ${(d * 100).toFixed(0)} cm from the trajectory start (limit 10 cm).` });
     }
   });
   // 4. planned separation

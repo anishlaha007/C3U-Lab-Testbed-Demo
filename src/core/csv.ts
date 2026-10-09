@@ -75,13 +75,23 @@ export function parseTrajectoryCsv(text: string, meta: Partial<TrajectoryMeta> =
   const header = rows[0].split(/[,;\t]/).map((h) => h.trim().toLowerCase());
   const col = (name: string) => header.indexOf(name);
   for (const req of ['t', 'x', 'y', 'z']) if (col(req) < 0) throw new Error(`CSV is missing the "${req}" column (expected ${CSV_COLUMNS.join(',')}).`);
-  const data = rows.slice(1).map((r) => r.split(/[,;\t]/).map((x) => Number(x.trim())));
+  // every present cell must be a finite number: Number('') is 0 and 'nan' is NaN, both of which
+  // would otherwise slip past the validator into the simulation
+  const data = rows.slice(1).map((r, i) =>
+    r.split(/[,;\t]/).map((x, c) => {
+      const v = x.trim();
+      const num = v === '' ? NaN : Number(v);
+      if (c < header.length && header[c] && !Number.isFinite(num)) throw new Error(`Row ${i + 2}, column "${header[c]}": "${v}" is not a finite number.`);
+      return num;
+    }),
+  );
   const get = (name: string) => {
     const c = col(name);
     return c < 0 ? null : data.map((r) => r[c]);
   };
   const t = get('t')!;
   for (let i = 0; i < t.length; i++) if (!Number.isFinite(t[i])) throw new Error(`Row ${i + 2}: t is not a number.`);
+  for (let i = 1; i < t.length; i++) if (!(t[i] > t[i - 1])) throw new Error(`Row ${i + 2}: time stamps must strictly increase (t = ${t[i]} after ${t[i - 1]}).`);
   const full = ['vx', 'vy', 'vz', 'ax', 'ay', 'az'].every((c) => col(c) >= 0);
   const n = t.length;
   let tr = allocTrajectory(n, defaultMeta({ solver: 'imported', strategy: 'imported', ...meta }));

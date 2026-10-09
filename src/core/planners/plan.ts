@@ -81,8 +81,9 @@ export function solvePlan(cfg: SimConfig, opts: SolveOptions = {}): PlanResult {
   const pl = cfg.planner;
   const M = Math.max(1, Math.min(80, Math.round(pl.M)));
   const vertical = cfg.scenario.type === 'ringCircuit';
-  const specs = candidateSpecs(M, cfg.seed, 4, vertical);
   const dynamicOn = cfg.course.dynamicObstacles;
+  const timing = dynamicOn && setup.course.obstacles.some(isDynamic);
+  const specs = candidateSpecs(M, cfg.seed, 4, vertical, timing);
   const geomVisits = (i: number): GateVisit[] => {
     const seq = setup.course.droneSequences?.[i] ?? setup.course.sequence;
     const out: GateVisit[] = [];

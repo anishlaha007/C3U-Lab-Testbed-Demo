@@ -19,6 +19,11 @@ import type { Candidate } from './types';
 
 export const OFFSET_LEVELS = [-1, -0.5, 0, 0.5, 1];
 export const SPEED_LEVELS = [0.8, 0.85, 0.9, 0.95, 1.0];
+/**
+ * With moving obstacles on, the race is also a timing problem: a 20% speed range shifts the
+ * arrival at a pendulum by a fraction of its period, so slower centreline timings are added.
+ */
+export const TIMING_LEVELS = [0.6, 0.65, 0.7, 0.75];
 
 export interface CandidateSpec {
   lateral: number[];
@@ -324,15 +329,25 @@ export function candidateLabel(spec: CandidateSpec): string {
  * {-w, -w/2, 0, w/2, w} x 5 speed levels, a seeded subset that always includes the centreline at
  * full speed.
  */
-export function candidateSpecs(M: number, seed: number, K = 4, vertical = false): CandidateSpec[] {
+export function candidateSpecs(M: number, seed: number, K = 4, vertical = false, timing = false): CandidateSpec[] {
   const out: CandidateSpec[] = [{ lateral: new Array(K).fill(0), vertical: vertical ? new Array(K).fill(0) : [], speed: 1.0 }];
   const key = (c: CandidateSpec) => `${c.lateral.join(',')}|${c.vertical.join(',')}|${c.speed}`;
   const seen = new Set([key(out[0])]);
+  // timing courses: the centreline at the slower timings comes first (before the structured cap)
+  if (timing) {
+    for (const sp of TIMING_LEVELS.slice().reverse()) {
+      const c: CandidateSpec = { lateral: new Array(K).fill(0), vertical: vertical ? new Array(K).fill(0) : [], speed: sp };
+      if (out.length < M) {
+        seen.add(key(c));
+        out.push(c);
+      }
+    }
+  }
   // structured members first: constant offsets at each speed, then random smooth profiles
   for (const sp of SPEED_LEVELS.slice().reverse()) {
     for (const o of [0, -0.5, 0.5, -1, 1]) {
       const c: CandidateSpec = { lateral: new Array(K).fill(o), vertical: vertical ? new Array(K).fill(0) : [], speed: sp };
-      if (!seen.has(key(c)) && out.length < Math.min(M, 15)) {
+      if (!seen.has(key(c)) && out.length < Math.min(M, timing ? 15 + TIMING_LEVELS.length : 15)) {
         seen.add(key(c));
         out.push(c);
       }
@@ -344,7 +359,7 @@ export function candidateSpecs(M: number, seed: number, K = 4, vertical = false)
     const c: CandidateSpec = {
       lateral: Array.from({ length: K }, () => rng.pick(OFFSET_LEVELS)),
       vertical: vertical ? Array.from({ length: K }, () => rng.pick([-0.5, 0, 0, 0.5])) : [],
-      speed: rng.pick(SPEED_LEVELS),
+      speed: rng.pick(timing ? [...TIMING_LEVELS, ...SPEED_LEVELS] : SPEED_LEVELS),
     };
     if (seen.has(key(c))) continue;
     seen.add(key(c));

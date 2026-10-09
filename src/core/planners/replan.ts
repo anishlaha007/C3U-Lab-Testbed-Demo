@@ -49,7 +49,8 @@ export function replanFromState(cfg: SimConfig, setup: RaceSetup, drones: Replan
   const n = drones.length;
   const pl = cfg.planner;
   const M = Math.max(4, Math.min(12, Math.round(pl.M)));
-  const specs = candidateSpecs(M, cfg.seed * 7919 + round, 4, cfg.scenario.type === 'ringCircuit');
+  const timing = cfg.course.dynamicObstacles && setup.course.obstacles.some(isDynamic);
+  const specs = candidateSpecs(M, cfg.seed * 7919 + round, 4, cfg.scenario.type === 'ringCircuit', timing);
   const arena = { sx: Math.max(cfg.arena.sx, setup.course.arena.sx), sy: Math.max(cfg.arena.sy, setup.course.arena.sy), sz: Math.max(cfg.arena.sz, setup.course.arena.sz) };
   const L = setup.track.length;
   const raceLength = setup.track.closed ? L * setup.laps : L;
@@ -67,7 +68,14 @@ export function replanFromState(cfg: SimConfig, setup: RaceSetup, drones: Replan
       continue;
     }
     const tr = setup.droneTracks[d];
-    const idx = closestIndex(tr, dr.p);
+    // search near the drone's known progress: a global nearest point can jump to the other
+    // branch where a track crosses itself (C9 figure-8), as ProgressTracker's window avoids
+    const L0 = setup.track.length;
+    const sLap = setup.track.closed ? ((dr.progress % L0) + L0) % L0 : Math.max(0, Math.min(L0, dr.progress));
+    const nPts = tr.pts.length;
+    const raw = Math.round(((sLap / L0) * tr.length) / tr.ds);
+    const hint = tr.closed ? ((raw % nPts) + nPts) % nPts : Math.max(0, Math.min(nPts - 1, raw));
+    const idx = closestIndex(tr, dr.p, Number.isFinite(dr.progress) ? hint : -1, 1.0);
     const sOwn = refineS(tr, dr.p, idx);
     const off = offsetsAt(tr, dr.p, idx);
     const lat = Math.max(-tr.halfWidth[idx], Math.min(tr.halfWidth[idx], off.lat));

@@ -74,8 +74,15 @@ export function speedScore(log: TrialLog, i: number, tr: TrackingMetrics, provis
   if (provisional) return scheduleScore(log, i);
   const g = log.summary.gates[i];
   if (g && g.attempted > 0) {
-    if (Number.isFinite(g.finishTime) && log.planned.duration > 0) return Math.min(1, log.planned.duration / g.finishTime);
-    return g.attempted ? g.passes / g.attempted : 0;
+    if (Number.isFinite(g.finishTime)) {
+      // this drone's planned last gate pass (not the whole run-in to rest, not the slowest drone)
+      const ref = log.planned.finish?.[i];
+      const planned = ref !== undefined && Number.isFinite(ref) ? ref : log.planned.duration;
+      return planned > 0 ? Math.min(1, planned / g.finishTime) : 1;
+    }
+    // unfinished course: share of the scheduled visits passed
+    const sched = g.scheduled ?? g.attempted;
+    return sched ? g.passes / sched : 0;
   }
   const prog = lastProgress(log, i);
   if (Number.isFinite(prog) && Number.isFinite(log.trackLength)) {

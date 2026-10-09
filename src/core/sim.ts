@@ -65,6 +65,8 @@ export interface SimDrone {
   mode: SupervisorMode;
   crashed: boolean;
   hoverPoint: Vec3 | null;
+  /** Where the onboard loop holds during a stale-setpoint episode (cleared when packets resume). */
+  staleHoverPoint: Vec3 | null;
   stale: boolean;
   wind: OUWind;
   noise: Rng;
@@ -90,6 +92,9 @@ export interface SimDrone {
   // laps
   lapSide: number;
   lastLapT: number;
+  /** Gate misses / strikes at the last lap boundary (a lap counts only if it adds none). */
+  missesAtLap: number;
+  strikesAtLap: number;
   lapTimes: number[];
   // accumulators
   pathLength: number;
@@ -249,6 +254,7 @@ export class Simulation {
         mode: 'normal',
         crashed: false,
         hoverPoint: null,
+        staleHoverPoint: null,
         stale: false,
         wind: new OUWind(cfg.system.windSigma, cfg.system.windTau, new Rng(deriveSeed(cfg.seed, 'wind', i))),
         noise: new Rng(deriveSeed(cfg.seed, 'noise', i)),
@@ -270,6 +276,8 @@ export class Simulation {
         finishTime: NaN,
         lapSide: 0,
         lastLapT: 0,
+        missesAtLap: 0,
+        strikesAtLap: 0,
         lapTimes: [],
         pathLength: 0,
         effort: 0,
@@ -371,7 +379,10 @@ export class Simulation {
         d.lastArrival = t;
         this.latencySum += t - pk.tCapture;
         this.latencyCount++;
-        if (d.stale) d.stale = false;
+        if (d.stale) {
+          d.stale = false;
+          d.staleHoverPoint = null;
+        }
       }
     }
 
@@ -389,9 +400,10 @@ export class Simulation {
             d.stale = true;
             this.log.summary.staleEvents++;
             this.event('stale', { drone: d.id });
-            d.hoverPoint = d.hoverPoint ?? { ...d.onboard.latest.p };
+            // hold where the drone is now (a geofence hover keeps its own point)
+            d.staleHoverPoint = d.hoverPoint ?? { ...d.onboard.latest.p };
           }
-          sp = hoverSetpoint(d.hoverPoint ?? d.onboard.latest.p, d.setpoint.yaw);
+          sp = hoverSetpoint(d.staleHoverPoint ?? d.onboard.latest.p, d.setpoint.yaw);
         }
         if (!pure) {
           const est = d.onboard.read(t);
@@ -557,15 +569,17 @@ export class Simulation {
 
     let res: FilterResult | null = null;
     if (filterOn) {
-      const fd: FilterDrone[] = this.drones.map((d, i) => ({
-        p: preds[i].p,
-        v: preds[i].v,
-        uNom: uNoms[i],
-        twr: batteryTwr(d.twr0, sys.batterySag, t),
-        active: d.mode === 'normal' && !d.crashed,
-        progress: d.progress ? d.progress.progress : NaN,
-      }));
-      this.lastPrims = this.geom.primitives(tRace);
+      const fd: FilterDrone[] = this.drones.map((d, i) => {
+        const twr = batteryTwr(d.twr0, sys.batterySag, t);
+        const active = d.mode === 'normal' && !d.crashed;
+        // drones under supervisor control stay in the pair constraints with their known input
+        const present = !active && !d.crashed && (d.mode === 'emergency' || d.mode === 'hover');
+        const uFixed = d.mode === 'emergency' ? brakeSetpoint(preds[i].p, preds[i].v, 0.9 * Math.sqrt(Math.max(0, (sys.eta * twr * G) ** 2 - G * G)), 0).a : v3();
+        return { p: preds[i].p, v: preds[i].v, uNom: present ? uFixed : uNoms[i], twr, active, present, progress: d.progress ? d.progress.progress : NaN };
+      });
+      // moving obstacles at the same time as the predicted drone states (t + tau_c when
+      // compensating latency); physics checks use the obstacles at the current time
+      this.lastPrims = this.geom.primitives(comp ? tRace + this.tauC : tRace);
       res = runSafetyFilter(fd, fcfg.obstacles ? this.lastPrims : [], {
         cfg: fcfg,
         eta: sys.eta,
@@ -601,7 +615,10 @@ export class Simulation {
       for (const [i, j] of this.pairs) {
         const di = this.drones[i];
         const dj = this.drones[j];
-        if (di.mode !== 'normal' || dj.mode !== 'normal' || di.crashed || dj.crashed) continue;
+        // pairs with at least one normal drone: a drone already braking or hovering is an obstacle
+        // the normal one must not run into (only normal drones switch to emergency below)
+        if (di.crashed || dj.crashed || di.mode === 'killed' || dj.mode === 'killed') continue;
+        if (di.mode !== 'normal' && dj.mode !== 'normal') continue;
         if (predictViolation(preds[i].p, preds[i].v, res.uSafe[i], preds[j].p, preds[j].v, res.uSafe[j], D, 0.1)) {
           // only when currently outside (otherwise the violation is ongoing, not imminent)
           if (scaledSeparation(preds[i].p, preds[j].p, D) >= 1) {
@@ -849,9 +866,16 @@ export class Simulation {
     }
   }
 
+  private primsCache: { t: number; prims: Primitive[] } = { t: -1, prims: [] };
+  /** Obstacle primitives at the current physics time (moving ones evaluated once per tick). */
+  private primsNow(): Primitive[] {
+    if (this.primsCache.t !== this.t) this.primsCache = { t: this.t, prims: this.geom.primitives(this.t) };
+    return this.primsCache.prims;
+  }
+
   private obstacleChecks(d: SimDrone): void {
     const p = d.state.p;
-    const prims = this.lastPrims.length ? this.lastPrims : this.geom.primitives(this.t);
+    const prims = this.primsNow();
     for (const prim of prims) {
       if (prim.kind === 'plane') continue;
       if (!nearBounds(p, primitiveBounds(prim), 1.0)) continue;
@@ -886,9 +910,15 @@ export class Simulation {
       const tr = this.build.trajectories[d.id];
       const minGap = 0.5 * ((tr.lapPeriod ?? 1) / this.build.k);
       if (near && aligned && this.t - d.lastLapT > minGap) {
-        d.lapTimes.push(this.t - d.lastLapT);
+        // on a course a lap with a missed or struck gate is not finished (Section 9 ring events)
+        const clean = !this.build.course || (d.misses === d.missesAtLap && d.strikes === d.strikesAtLap);
+        if (clean) {
+          d.lapTimes.push(this.t - d.lastLapT);
+          this.event('lap', { drone: d.id, detail: `${d.lapTimes.length}` });
+        }
         d.lastLapT = this.t;
-        this.event('lap', { drone: d.id, detail: `${d.lapTimes.length}` });
+        d.missesAtLap = d.misses;
+        d.strikesAtLap = d.strikes;
       }
     }
   }
@@ -914,6 +944,7 @@ export class Simulation {
         misses: d.misses + remaining,
         strikes: d.strikes,
         attempted: d.passes + d.misses + remaining + d.strikes,
+        scheduled: d.visits.length,
         finishTime: d.finishTime,
         passTimes: d.passTimes.slice(),
       };
@@ -938,7 +969,7 @@ export class Simulation {
         lapTimes: this.drones.map((d) => d.lapTimes.slice()),
         lapsCompleted: this.drones.map((d) => d.lapTimes.length),
         peakBraking: this.drones.map((d) => d.peakBraking),
-        gates: this.drones.map((d) => ({ passes: d.passes, misses: d.misses, strikes: d.strikes, attempted: d.passes + d.misses + d.strikes, finishTime: d.finishTime, passTimes: d.passTimes.slice() })),
+        gates: this.drones.map((d) => ({ passes: d.passes, misses: d.misses, strikes: d.strikes, attempted: d.passes + d.misses + d.strikes, scheduled: d.visits.length, finishTime: d.finishTime, passTimes: d.passTimes.slice() })),
       },
       planned: { ...this.log.planned, effort: this.log.planned.effort.map((_, i) => plannedEffortUpTo(this.build.trajectories[i], this.build.k, this.t)) },
     };
@@ -954,7 +985,10 @@ export class Simulation {
 export function hashTrialLog(log: TrialLog): string {
   const { solveMs: _omit, ...rest } = log;
   void _omit;
-  return hashText(JSON.stringify(rest, (_k, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v)));
+  // re-planning solve times are wall-clock measurements too: keep them out of the fingerprint
+  const summary = { ...rest.summary, replanMsMax: 0 };
+  const events = rest.events.map((e) => (e.type === 'replan' ? { ...e, detail: '' } : e));
+  return hashText(JSON.stringify({ ...rest, summary, events }, (_k, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v)));
 }
 
 /** Run a whole trial headlessly. */

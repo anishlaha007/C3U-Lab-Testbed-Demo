@@ -865,7 +865,10 @@ This compensates the sensing delay and sample age (`t_now − t0`) and the comma
 intended acceleration is `u_safe` in normal mode, 0 in hover, and the brake feed-forward in emergency
 (last 40 commands kept). The predicted state is used for the constraints, for `u_nom`, for initialising
 the filtered reference, and by the supervisor's violation prediction and brake setpoint (the geofence
-test uses the ground estimate). Without compensation the latest ground estimate is used throughout.
+test uses the ground estimate). Moving obstacles (pendulum, slider) are deterministic in the race clock, so
+the filter evaluates them at the same predicted time `t_now + τ_c`; physics-rate collision checks and M25
+use them at the current time every 1 ms step. Without compensation the latest ground estimate and the
+obstacles at `t_now` are used throughout.
 
 ---
 
@@ -877,10 +880,12 @@ test uses the ground estimate). Without compensation the latest ground estimate 
   the drone switches to hover at the projection of its position onto that box (sticky). Scored as gate
   0.5 (Section 13).
 - **Stale setpoint.** On an onboard tick, if no packet has arrived for more than 2 control periods (after
-  the first `τ_c + 2T`), the drone hovers at its onboard estimate until the next packet arrives.
+  the first `τ_c + 2T`), the drone hovers at its onboard estimate at the start of that stale episode until
+  the next packet arrives (the hold point is cleared then).
 - **Emergency brake.** Triggered (a) for both drones of every pair the filter's re-check reports infeasible,
   once some pair has been infeasible for 3 consecutive control ticks (one-tick transients are absorbed by
-  the margin), or (b) for both drones of a pair (both in normal mode) when a violation is predicted within
+  the margin), or (b) for the normal-mode drones of a pair (at least one normal; the other may already be
+  braking or hovering) when a violation is predicted within
   0.1 s while the pair is currently outside (`s ≥ 1`, filter margin): a double-integrator rollout of the
   closing pair under `u_safe`, at 5 ms steps,
 
@@ -891,8 +896,11 @@ test uses the ground estimate). Without compensation the latest ground estimate 
   (threshold 0.98 because a CBF legitimately rides `s = 1` and a constant-input extrapolation dips
   marginally under it). The brake setpoint is `p = p̂`, `v = v̂` and feed-forward
   `a = −a_brake v̂ / |v̂|` with `a_brake = 0.9 √((η TWR g)² − g²)` (90 % of the horizontal limit) and the
-  vertical component capped at 3 m/s²; below 0.05 m/s the drone hovers where it stopped. Braking drones
-  leave the filter. The trial ends 2.5 s later. Gate 0.5.
+  vertical component capped at 3 m/s²; below 0.05 m/s the drone hovers where it stopped. A braking or
+  hovering drone is no longer corrected by the filter but keeps its pair constraints with normal drones as
+  a fixed-input obstacle: its input `u_j` (brake feed-forward, or 0 when hovering) moves to the right-hand
+  side, `(−a)ᵀ u_i ≥ b − aᵀ u_j`, so the whole correction goes to the normal drone. The trial ends 2.5 s
+  later. Gate 0.5.
 - **Kill** (key K): motors off for every drone (ballistic fall, Section 3.6); the trial ends 2 s later.
 - **Vicon jump** over 10 cm: rejected, estimate held, event counted (Section 5).
 - **Crash detection** (physics rate): drone–drone centre distance `< 0.10 m` (both crash); signed distance
@@ -1006,7 +1014,9 @@ times a speed scale:
   `[¼, ½, ¼]` smoother. On closed tracks the profile is also blended, over the same length before the
   end, into the drone's start lane, so each drone finishes at rest on its own start slot (the finish is
   the last gate pass, which comes before this run-in).
-- Speed levels `{0.8, 0.85, 0.9, 0.95, 1.0}`.
+- Speed levels `{0.8, 0.85, 0.9, 0.95, 1.0}`. With moving obstacles on, the centreline is also offered at
+  `{0.6, 0.65, 0.7, 0.75}` (first in the set) and random members draw from both ranges: timing the gaps of
+  a pendulum needs a larger shift than the spec's 20 % range gives.
 - The set of size `M` (default 30, maximum 80) always contains the centreline at full speed, then
   constant offsets (0, ∓0.5, ∓1) from the fastest level down (at most 15 structured members), then
   seeded random profiles, deduplicated.
@@ -1079,10 +1089,10 @@ Common definitions: `e = p − p_ref`; when `|v_ref| > 0.05 m/s`, `t̂ = v_ref /
 | M2 | Max tracking error | `max_k \|e_k\|` | m | `tracking.ts` |
 | M3 | Along-track RMS | `√(mean_k e_along,k²)` | m | `tracking.ts` |
 | M4 | Cross-track RMS | `√(mean_k \|e_cross,k\|²)` | m | `tracking.ts` |
-| M5 | Lap time | mean of times between start-plane crossings; the plane passes through the trajectory's first point with normal along the initial planned velocity; a crossing counts when going from the negative to the non-negative side within 0.3 m of that point, with `nᵀv > 0.5 \|v\|`, more than half a planned lap after the previous one (the first lap is timed from `t = 0`) | s | `sim.ts lapCheck` |
+| M5 | Lap time | mean of times between start-plane crossings; the plane passes through the trajectory's first point with normal along the initial planned velocity; a crossing counts when going from the negative to the non-negative side within 0.3 m of that point, with `nᵀv > 0.5 \|v\|`, more than half a planned lap after the previous one (the first lap is timed from `t = 0`); on a course a lap counts only if it added no gate miss or strike | s | `sim.ts lapCheck` |
 | M6 | Mean / peak speed | `mean_k \|v_k\|`, `max_k \|v_k\|` (true velocity) | m/s | `tracking.ts` |
 | M7 | Latency | configured total `L`; measured mean `t_arrival − t_capture` over delivered packets (Section 2) | ms | `sim.ts` |
-| M8 | Completion | ring course: 1 if finished, else `passes / (passes + misses + [crashed])`; periodic: `min(1, laps / planned laps)`; otherwise 1, or 0 if crashed | ratio | `tracking.ts` |
+| M8 | Completion | ring course: 1 if finished, else `passes / scheduled visits` (all laps); periodic: `min(1, laps / planned laps)`; otherwise 1, or 0 if crashed | ratio | `tracking.ts` |
 | M9 | Feasibility margin | share of planned 100 Hz samples failing the check of Section 7 | ratio | `feasibility.ts` |
 | M10 | Collisions | drone–drone contacts (`d < 0.10 m`, once per contact) + gate strikes + obstacle hits, physics rate | count | `sim.ts` |
 | M11 | Closest approach | `min s(t)` over pairs and physics ticks while a drone of the pair flies (unit margin) | scaled | `sim.ts` |
@@ -1094,7 +1104,7 @@ Common definitions: `e = p − p_ref`; when `|v_ref| > 0.05 m/s`, `t̂ = v_ref /
 | M17 | Planned safety | `min s` between planned trajectories sampled every 0.01 s of scaled time (unit margin) | scaled | `planned.ts` |
 | M18 | Win rate | wins / races with a Wilson 95 % interval. Winner per race: on ring courses the first non-crashed finisher; otherwise the non-crashed drone with most progress; none if all crashed | ratio | `racing.ts`, `stats.ts` |
 | M19 | Final progress gap | `s_0 − s_1` at the last finite progress inside the window | m | `racing.ts` |
-| M20 | Prediction fidelity | per race: predicted winner = winner; ratio: realised gap at the planner's horizon `T` / predicted gap | ratio | `racing.ts`, `RaceTab.tsx` |
+| M20 | Prediction fidelity | per race: predicted winner = winner; ratio: realised gap at the planner's horizon / predicted gap, the horizon taken in race time (`T / k`) | ratio | `racing.ts`, `RaceTab.tsx` |
 | M21 | Overtakes | sign changes of `s_0 − s_1`, with a ±0.05 m dead band (values inside the band keep the previous sign) | count | `racing.ts` |
 | M22 | Control effort | `∫ \|f\| dt` at physics rate in the window, `f = a + g e_z` the realised thrust (after saturation and lag, no wind). Planned: trapezoid `∫ \|a_ref k² + g e_z\| dt` over scaled time | m/s | `sim.ts`, `planned.ts` |
 | M23 | Gate pass rate | `Σ passes / Σ attempted`, `attempted = passes + misses + strikes` (+ unreached visits in a completed run) | ratio | `safety.ts courseMetrics` |
@@ -1125,9 +1135,13 @@ separation violation (`M12 > 0`) without contact; otherwise 1.
 ```
 S = 0.5 · [(1 − M13) + min(1, M11)]           (M11 = ∞ for one drone → 1)
 A = max(0, 1 − M1 / 0.30)
-E = min(1, planned effort / actual effort)
+E = min(1, planned effort / actual effort)     (planned effort holds hover |f| = g from the end of the
+                                                 drone's trajectory to the end of the race window, the
+                                                 window of the measured effort)
 V = min(1, planned lap time / actual lap time)  if laps were timed, otherwise the fallback chain:
-    ring course:  finished → min(1, planned duration / finish time), else passes / attempted
+    ring course:  finished → min(1, planned finish / finish time), the planned finish being the time of
+                  this drone's last scheduled gate pass on its planned trajectory;
+                  unfinished (whatever ended the run) → passes / scheduled visits
     track:        clamp(progress / planned line length (or track length), 0, 1)
     periodic, no lap completed: M8
     point-to-point: min(1, planned arrival / actual arrival), arrival = first time within 0.15 m of
@@ -1155,7 +1169,9 @@ S 0.83, V 0.95, A 0.62, E 0.83 scores `0.8075 ≈ 0.81`. A separation violation 
 `rankingStability`: rank the conditions by score under the reference weights (equal by default; ties by
 index). Then sample 200 weight vectors from a flat Dirichlet, drawn as `w_k = −ln U_k` with seeded uniform
 `U_k` (normalisation is unnecessary because the score is scale-invariant in the weights), and report the
-share of samples for which the full ranking is unchanged.
+share of samples for which the full ranking is unchanged. For a set of experiment conditions the
+condition's score is `G_mean · weighted mean of the mean sub-scores` (the same aggregate the Results tab
+shows), not the mean of the trial scores.
 
 ### 13.3 Statistics
 

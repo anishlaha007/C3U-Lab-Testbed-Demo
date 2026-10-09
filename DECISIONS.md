@@ -81,11 +81,35 @@ Non-obvious choices made while building the simulator, with the reason for each.
 - **Validator check 4** (planned separation below 1) is a warning, not a block: the whole point of
   Aim 2 is to fly conflicting plans and watch the filter resolve them.
 
+- **Drones under supervisor control stay in the filter.** A drone in emergency brake or geofence hover
+  can no longer be corrected, but it keeps its pair constraints with every drone that can: its input is
+  fixed (its brake or hover acceleration) and the whole correction goes to the other drone. Dropping
+  such pairs let a normal drone fly into a braking one (found by the core review, regression test in
+  `regressions.test.ts`). The supervisor's imminent-violation check also covers these mixed pairs and
+  brakes only the normal drone.
+- **Moving obstacles at the predicted time.** With latency compensation the filter evaluates the drone
+  states at t + τc, so the deterministic pendulum and slider are evaluated at t + τc too; physics-rate
+  collision checks and M25 use the obstacles at the current time every 1 ms step.
+- **Stale setpoints** hover at the position where each stale episode starts (cleared when packets
+  resume); a geofence hover keeps its own point.
+- **The supervisor uses the filter's margin ellipsoid** for its imminent-violation prediction (Section
+  8.4 defines the separation with the margin multiplier), so larger margins also brake earlier in the
+  M2 margin sweep. The separation metrics stay on the unit ellipsoid.
+- **Blending** keeps the position reference continuous; the velocity reference steps to the first-order
+  blend rate at the switch (Section 6's 0.5 s time constant, MODEL.md §8).
+
 ## Scoring
 
 - **Geofence hover scores G = 0.5.** The supervisor's geofence hover is a safety intervention of the
   same kind as an emergency brake; the spec does not list it, and 0 (as for leaving the arena) would
   punish a drone the supervisor kept inside.
+- **Effort over the same window.** The measured effort runs to the end of the race window; a drone that
+  finishes earlier is planned to hover (|f| = g) until then, so E compares like with like (before, the
+  faster drone was penalised by up to 30%).
+- **V on courses** compares each drone's own planned last gate pass with its actual finish (not the
+  whole run-in to rest, not the slowest drone). An unfinished course scores V and M8 as passes /
+  scheduled visits, whatever ended the run; a lap counts (M5) only if it adds no gate miss or strike.
+- **M20** reads the realised gap at the planner's horizon in race time (horizon / k).
 - **M22 effort uses the actual thrust** (the specific force after saturation and lag), not the
   commanded one: it is what the battery pays for.
 - **Provisional live scoring.** While a trial runs, V and E are computed up to the current time so the
@@ -130,6 +154,13 @@ Non-obvious choices made while building the simulator, with the reason for each.
 - **Pure-strategy Nash** with a tie-break rule; when no pure equilibrium exists, iterated best response
   from the independent solution, reported as such. **Strong Stackelberg** (ties broken in the leader's
   favour).
+- **Timing candidates on courses with moving obstacles.** The spec's speed levels (0.8 to 1.0) shift the
+  arrival at a pendulum by a fraction of its period, so on C7 (T14) every candidate either met a moving
+  obstacle or hit a static one, and the drone flew the forced centreline into the pendulum. With moving
+  obstacles on, the centreline is also offered at 0.6 to 0.75 of full speed, which lets the planner time
+  the gaps (T14 is now clean at 25 and 80 ms on every seed tested).
+- **Re-planning** starts its search for the drone's position on the track near its known progress, so
+  on the self-crossing C9 circuit it cannot jump to the other branch.
 - **Starts alternate** in race series (`swapStarts` on odd races) so a start-position advantage averages
   out of the win rates.
 - Candidates leaving the geofence are invalid; open (non-loop) courses end with the drone clamped 0.9 m
@@ -167,5 +198,9 @@ Non-obvious choices made while building the simulator, with the reason for each.
   the deadlock breaker off: without latency compensation every seed collides; with it none does (small
   boundary dips remain at this delay). With the exponential CBF at λ = 12 the case fails even at zero
   latency, matching the preliminary table's "λ = 12 unsafe".
+- **Determinism.** Wall-clock solve times (filter and re-planning) are logged for display but kept out of
+  the trial-log hash.
+- **CSV import** rejects empty or non-numeric cells and time stamps that do not strictly increase (row
+  and column named); the validator also blocks any non-finite sample.
 - **T11 filter off** uses the T5 intersection at w = 0.78 with phase π, where the drones collide at the
   centre without the filter.

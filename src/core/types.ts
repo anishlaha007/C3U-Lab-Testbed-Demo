@@ -415,6 +415,8 @@ export interface GateStats {
   misses: number;
   strikes: number;
   attempted: number;
+  /** Gate visits scheduled for the whole run (all laps): the denominator of course completion. */
+  scheduled?: number;
   /** Time of the last clean pass of the final gate (course completion), NaN if not completed. */
   finishTime: number;
   /** Gate passes (sequence index, time). */
@@ -470,7 +472,10 @@ export interface PlannedInfo {
   laps: number[];
   /** Planned arrival time at the final point per drone (s, scaled). */
   arrival: number[];
-  /** Planned effort per drone (integral |a_ref + g e_z| dt) (m/s). */
+  /** Planned time of the last scheduled gate pass per drone (s, scaled); NaN without a course. */
+  finish?: number[];
+  /** Planned effort per drone (integral |a_ref + g e_z| dt over the race window, holding hover
+   * after the trajectory ends, the same window as the measured effort) (m/s). */
   effort: number[];
   /** Share of planned samples failing the thrust/tilt check (M9). */
   feasibilityFail: number[];

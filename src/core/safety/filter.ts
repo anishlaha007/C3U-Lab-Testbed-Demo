@@ -25,8 +25,14 @@ export interface FilterDrone {
   v: Vec3;
   uNom: Vec3;
   twr: number;
-  /** Participates in the filter (flying and streamed). */
+  /** The filter may change this drone's input (flying normally and streamed). */
   active: boolean;
+  /**
+   * Still flying but under supervisor control (emergency brake, hover): it keeps its pair
+   * constraints with active drones as a moving obstacle whose input `uNom` is fixed (its brake or
+   * hover acceleration), so the active drones avoid it. Default: same as `active`.
+   */
+  present?: boolean;
   /** Progress along the track (m), NaN when no track (used for follower responsibility). */
   progress: number;
 }
@@ -106,10 +112,11 @@ export function runSafetyFilter(drones: FilterDrone[], obstacles: readonly Primi
     prm.pureAccelLimit !== undefined ? prm.pureAccelLimit : maxAccelAlong(dir, twr, prm.eta);
 
   // ---- pair constraints
+  const inPairs = (d: FilterDrone) => d.active || !!d.present;
   for (let i = 0; i < n; i++) {
-    if (!drones[i].active) continue;
+    if (!inPairs(drones[i])) continue;
     for (let j = i + 1; j < n; j++) {
-      if (!drones[j].active) continue;
+      if (!inPairs(drones[j]) || (!drones[i].active && !drones[j].active)) continue;
       const di = drones[i];
       const dj = drones[j];
       const k = pairIndex(i, j, n);
@@ -156,7 +163,17 @@ export function runSafetyFilter(drones: FilterDrone[], obstacles: readonly Primi
   // ---- responsibility: follower-only moves the leader's term to the right-hand side
   const weights = drones.map((_, i) => (cfg.responsibility === 'weights' ? Math.max(0.05, cfg.weights[i] ?? 1) : 1));
   const solveSet: LinearConstraint[] = constraints.map((c) => {
-    if (c.kind !== 'pair' || cfg.responsibility !== 'follower') return c;
+    if (c.kind !== 'pair') return c;
+    // a drone under supervisor control keeps its input: the whole correction goes to the other
+    if (!drones[c.i].active) {
+      const ui = drones[c.i].uNom;
+      return { ...c, i: c.j, j: -1, a: v3(-c.a.x, -c.a.y, -c.a.z), b: c.b - (c.a.x * ui.x + c.a.y * ui.y + c.a.z * ui.z) };
+    }
+    if (!drones[c.j].active) {
+      const uj = drones[c.j].uNom;
+      return { ...c, j: -1, b: c.b + (c.a.x * uj.x + c.a.y * uj.y + c.a.z * uj.z) };
+    }
+    if (cfg.responsibility !== 'follower') return c;
     const leader = pairLeader(drones[c.i], drones[c.j], c.i, c.j);
     if (leader === c.i) {
       // a.(u_i - u_j) >= b with u_i fixed  ->  (-a).u_j >= b - a.u_i
@@ -176,6 +193,7 @@ export function runSafetyFilter(drones: FilterDrone[], obstacles: readonly Primi
       if (c.kind !== 'pair') continue;
       const di = drones[c.i];
       const dj = drones[c.j];
+      if (!di.active || !dj.active) continue;
       const lhs = c.a.x * (di.uNom.x - dj.uNom.x) + c.a.y * (di.uNom.y - dj.uNom.y) + c.a.z * (di.uNom.z - dj.uNom.z);
       if (lhs >= c.b) continue;
       const dx = di.p.x - dj.p.x;

@@ -77,7 +77,8 @@ export function trackingMetrics(log: TrialLog, i: number): TrackingMetrics {
   let completion: number;
   const gates = log.summary.gates[i];
   if (gates && gates.attempted > 0) {
-    completion = Number.isFinite(gates.finishTime) ? 1 : gates.passes / Math.max(1, gates.passes + gates.misses + (crashed ? 1 : 0));
+    // an unfinished course (whatever ended it) completed passes / scheduled visits
+    completion = Number.isFinite(gates.finishTime) ? 1 : gates.passes / Math.max(1, gates.scheduled ?? gates.passes + gates.misses + (crashed ? 1 : 0));
   } else if (attemptedLaps > 0) {
     completion = Math.min(1, laps.length / attemptedLaps);
   } else {
