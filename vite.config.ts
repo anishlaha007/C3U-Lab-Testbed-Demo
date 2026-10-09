@@ -9,7 +9,19 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   worker: { format: 'es' },
   build: {
-    chunkSizeWarningLimit: 2500,
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        // vendor chunks: cached across app updates and downloaded in parallel
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/[\\/](three|@react-three|three-stdlib|postprocessing|@react-spring|maath|camera-controls|troika)/.test(id)) return 'vendor-three';
+          if (/[\\/](recharts|d3-|victory-vendor|decimal\.js|es-toolkit|immer|@reduxjs|redux|reselect)/.test(id)) return 'vendor-charts';
+          if (/[\\/](react|react-dom|scheduler|zustand|use-sync-external-store)[\\/]/.test(id)) return 'vendor-react';
+          return undefined;
+        },
+      },
+    },
   },
   test: {
     include: ['src/tests/**/*.test.ts'],

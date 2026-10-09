@@ -286,7 +286,7 @@ export function FileDrop() {
 }
 
 /** "Import CSV…" button: the same import through a file picker. */
-export function ImportButton({ small, className }: { small?: boolean; className?: string }) {
+export function ImportButton({ small, className, label = 'Import CSV…' }: { small?: boolean; className?: string; label?: string }) {
   const input = useRef<HTMLInputElement>(null);
   const onChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -303,7 +303,7 @@ export function ImportButton({ small, className }: { small?: boolean; className?
         title="Load trajectory CSVs from the lab’s solvers (one per drone) plus optional metadata JSON. You can also drop them anywhere on the window."
         onClick={() => input.current?.click()}
       >
-        Import CSV…
+        {label}
       </Button>
     </>
   );

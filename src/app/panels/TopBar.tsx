@@ -9,13 +9,25 @@ import { ExportMenu } from './ExportMenu';
 import { ImportButton } from './FileDrop';
 import { Button, Select, Tabs, Tip } from '../ui';
 
-const MODES: { value: Mode; label: string; title: string }[] = [
-  { value: 'sandbox', label: 'Sandbox', title: 'Free exploration of every setting' },
-  { value: 'm1', label: 'Milestone 1', title: 'Nominal trajectory tracking (key 1)' },
-  { value: 'm2', label: 'Milestone 2', title: 'Safety-filtered tracking (key 2)' },
-  { value: 'm3', label: 'Milestone 3', title: 'Game-theoretic racing (key 3)' },
-  { value: 'scorecard', label: 'Scorecard', title: 'How every run is scored' },
+const MODES: { value: Mode; label: string; short: string; title: string }[] = [
+  { value: 'sandbox', label: 'Sandbox', short: 'Sandbox', title: 'Free exploration of every setting' },
+  { value: 'm1', label: 'Milestone 1', short: 'M1', title: 'Milestone 1: nominal trajectory tracking (key 1)' },
+  { value: 'm2', label: 'Milestone 2', short: 'M2', title: 'Milestone 2: safety-filtered tracking (key 2)' },
+  { value: 'm3', label: 'Milestone 3', short: 'M3', title: 'Milestone 3: game-theoretic racing (key 3)' },
+  { value: 'scorecard', label: 'Scorecard', short: 'Scorecard', title: 'How every run is scored' },
 ];
+
+/** True while the viewport is at least `px` wide (keeps the top bar on one row on laptops). */
+function useMinWidth(px: number): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(`(min-width: ${px}px)`);
+      mq.addEventListener('change', cb);
+      return () => mq.removeEventListener('change', cb);
+    },
+    () => window.matchMedia(`(min-width: ${px}px)`).matches,
+  );
+}
 
 export function useEngineStatus() {
   return useSyncExternalStore(
@@ -25,6 +37,9 @@ export function useEngineStatus() {
 }
 
 export function TopBar() {
+  const wide = useMinWidth(1800);
+  const medium = useMinWidth(1500);
+  const xwide = useMinWidth(2200);
   const config = useStore((s) => s.config);
   const mode = useStore((s) => s.mode);
   const setMode = useStore((s) => s.setMode);
@@ -57,13 +72,20 @@ export function TopBar() {
             <circle cx="24" cy="24" r="4" />
           </g>
         </svg>
-        <div className="leading-tight">
-          <div className="text-sm font-semibold">C3U Multi-Drone Racing Testbed</div>
-          <div className="text-[10px] text-slate-500">Georgia Tech AE · C3U Lab · browser simulator</div>
-        </div>
+        {/* the full title only where there is room, so the bar stays on one row on laptops */}
+        {wide ? (
+          <div className="leading-tight">
+            <div className="text-sm font-semibold">C3U Multi-Drone Racing Testbed</div>
+            <div className="text-[10px] text-slate-500">Georgia Tech AE · C3U Lab · browser simulator</div>
+          </div>
+        ) : (
+          <div className="text-sm font-semibold whitespace-nowrap" title="C3U Multi-Drone Racing Testbed · Georgia Tech AE · C3U Lab">
+            C3U Testbed
+          </div>
+        )}
       </div>
 
-      <div className="w-56">
+      <div className="w-48">
         <Select
           value={config.scenario.preset || ''}
           options={[{ value: '', label: 'Custom scenario' }, ...SCENARIO_PRESETS.map((p) => ({ value: p.id, label: p.name }))]}
@@ -71,7 +93,7 @@ export function TopBar() {
         />
       </div>
 
-      <Tabs value={mode} options={MODES} onChange={setMode} />
+      <Tabs value={mode} options={MODES.map((m) => ({ value: m.value, label: medium ? m.label : m.short, title: m.title }))} onChange={setMode} />
 
       <div className="flex items-center gap-1">
         <Button kind="primary" onClick={() => engine.toggle()} disabled={!canPlay} title="Play / pause (Space)">
@@ -89,18 +111,22 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-1 text-[11px] text-slate-500">
-        <span>Speed</span>
-        <select className="rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-900" value={simSpeed} onChange={(e) => setSimSpeed(Number(e.target.value))}>
+        <select
+          title="Simulation speed (multiple of real time)"
+          className="rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-900"
+          value={simSpeed}
+          onChange={(e) => setSimSpeed(Number(e.target.value))}
+        >
           {[0.1, 0.25, 0.5, 1, 2, 4].map((s) => (
             <option key={s} value={s}>
               {s}x
             </option>
           ))}
         </select>
-        <span className="ml-2">Seed</span>
+        <span className="ml-1">Seed</span>
         <input
           type="number"
-          className="w-16 rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-900"
+          className="w-12 rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-900"
           value={config.seed}
           onChange={(e) => setConfig((c) => (c.seed = Math.max(0, Math.floor(Number(e.target.value) || 0))))}
         />
@@ -112,8 +138,11 @@ export function TopBar() {
       </div>
 
       <div className="ml-auto flex items-center gap-1.5">
-        <span className="hidden rounded bg-amber-100 px-2 py-0.5 text-[10px] text-amber-900 xl:inline dark:bg-amber-500/15 dark:text-amber-300">{HONESTY_LABEL}</span>
-        <ImportButton small />
+        {/* compact honesty label (the full sentence is also shown persistently over the 3D view) */}
+        <span title={HONESTY_LABEL} className="rounded bg-amber-100 px-2 py-0.5 text-[10px] whitespace-nowrap text-amber-900 dark:bg-amber-500/15 dark:text-amber-300">
+          {xwide ? HONESTY_LABEL : 'Simulation · illustrative'}
+        </span>
+        <ImportButton small label="Import…" />
         <ExportMenu />
         <Button small kind="ghost" title="Copy a link to this setup" onClick={() => copyLink(config).then((ok) => toast(ok ? 'Link to this setup copied.' : 'Could not copy the link.', ok ? 'success' : 'error'))}>
           Link
@@ -121,8 +150,8 @@ export function TopBar() {
         <Button small kind="ghost" title="Screenshot (S)" onClick={() => takeScreenshot()}>
           Shot
         </Button>
-        <Button small kind="ghost" onClick={toggleDark} title="Toggle light / dark theme">
-          {dark ? 'Light' : 'Dark'}
+        <Button small kind="ghost" onClick={toggleDark} title={dark ? 'Switch to the light theme' : 'Switch to the dark theme'}>
+          {dark ? '☀' : '☾'}
         </Button>
       </div>
     </header>
