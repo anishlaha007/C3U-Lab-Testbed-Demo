@@ -7,11 +7,11 @@ Checklist of the build phases (Section 14 of the build prompt).
 - [x] Phase 3: multi-drone safety (CBF filters, obstacle constraints, QP, latency compensation, reference consistency, supervisor, collisions, M10-M17)
 - [x] Phase 4: scenarios and files (trajectory library, presets T1-T14, gates, obstacles, courses C1-C12, racing line with A* detours, validator, course editor with worker-side validation and floor-plan export, CSV import (drag and drop) and export menu, URL hash)
 - [x] Phase 5: planners (track, candidates, rollouts, Independent/Nash/Stackelberg, N-drone IBR / priority chain, receding-horizon re-planning, worker, payoff matrix, Race and Game tabs, M18-M22)
-- [ ] Phase 6: scorecard, milestones and statistics
+- [x] Phase 6: scorecard, milestones and statistics
   - [x] experiment engine (M1 speed sweep and comparisons, M2 safety / margin / scaling sweeps, M3 race series) with bootstrap CIs, Wilson, binomial, permutation tests, Holm, ranking stability
   - [x] sweep worker pool with progress and cancel; M15 cost of safety for recorded trials
-  - [ ] Results tab
-  - [ ] guided milestone narration (M1, M2, M3) and Scorecard mode
+  - [x] Results tab (M1 / M2 / M3 experiment charts with CIs, Wilson intervals, Holm-corrected statements, radar and ranking stability, recorded trials with weights, CSV / JSON export)
+  - [x] guided milestone narration (M1, M2, M3) and Scorecard mode (interactive weights and gates, worked examples computed live)
 - [ ] Phase 7: polish and ship
   - [x] README (controls, presets, mapping onto the ROS 2 testbed, deploy), docs/MODEL.md, DECISIONS.md
   - [x] vendor chunk splitting, one-row responsive top bar, FPV fisheye lens, trail speed legend, chart fixes

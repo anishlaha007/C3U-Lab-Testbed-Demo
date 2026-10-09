@@ -1,5 +1,5 @@
 /** Shared pieces of the Results tab: throttled run records, empty states, export buttons, footers. */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { HONESTY_LABEL, PLANNER_LABEL } from '../../core/constants';
 import type { ExperimentKind, TrialRecord } from '../../core/experiments';
 import { EXPERIMENT_TITLES, runExperiment, useExperiments, type ExperimentRun } from '../experiments';
@@ -10,29 +10,41 @@ import { downloadCsv, downloadJson } from './exporting';
 
 /**
  * Records of an experiment run. While the run is in flight the pool flushes new records every
- * ~120 ms; re-aggregating (bootstrap CIs, permutation tests) that often would compete with the
- * UI, so the snapshot handed to the summaries is throttled to ~0.6 s until the run ends.
+ * ~120 ms; re-rendering the charts and re-aggregating (bootstrap CIs, permutation tests) that
+ * often would compete with the UI. So the section subscribes outside React and takes a snapshot
+ * of the run at most every `throttleMs` (immediately when a run starts, ends or is cleared); the
+ * launcher card shows the live progress in between.
  */
-export function useRunRecords(kind: ExperimentKind): { run: ExperimentRun | undefined; recs: TrialRecord[] } {
-  const run = useExperiments((s) => s.runs[kind]);
-  const records = run?.records;
-  const running = run?.status === 'running';
-  const [snap, setSnap] = useState(records);
-  const last = useRef(0);
+export function useRunRecords(kind: ExperimentKind, throttleMs = 1000): { run: ExperimentRun | undefined; recs: TrialRecord[] } {
+  const [snap, setSnap] = useState<ExperimentRun | undefined>(() => useExperiments.getState().runs[kind]);
   useEffect(() => {
-    if (!running) {
-      setSnap(records);
-      return;
-    }
-    const wait = Math.max(0, 600 - (performance.now() - last.current));
-    const id = window.setTimeout(() => {
-      last.current = performance.now();
-      setSnap(records);
-    }, wait);
-    return () => window.clearTimeout(id);
-  }, [records, running]);
-  const recs = useMemo(() => (snap ? (snap.filter(Boolean) as TrialRecord[]) : []), [snap]);
-  return { run, recs };
+    let last = 0;
+    let timer: number | undefined;
+    const push = () => {
+      timer = undefined;
+      last = performance.now();
+      setSnap(useExperiments.getState().runs[kind]);
+    };
+    const unsub = useExperiments.subscribe((s, prev) => {
+      const run = s.runs[kind];
+      const before = prev.runs[kind];
+      if (run === before) return;
+      if (!run || run.status !== 'running' || before?.startedAt !== run.startedAt) {
+        if (timer !== undefined) window.clearTimeout(timer);
+        push();
+      } else if (timer === undefined) {
+        timer = window.setTimeout(push, Math.max(0, throttleMs - (performance.now() - last)));
+      }
+    });
+    push(); // the run may have changed between render and subscription
+    return () => {
+      unsub();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [kind, throttleMs]);
+  const records = snap?.records;
+  const recs = useMemo(() => (records ? (records.filter(Boolean) as TrialRecord[]) : []), [records]);
+  return { run: snap, recs };
 }
 
 /** Records that ran without an exception (failed specs are kept in exports but not in charts). */

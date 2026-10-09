@@ -282,7 +282,7 @@ export const WORKED_STRATEGIES: { name: string; sub: SubScores; quoted: number }
 export const GATE_LEVELS: { G: number; reason: string }[] = [
   { G: 1, reason: 'clean run' },
   { G: 0.75, reason: 'separation violation without contact' },
-  { G: 0.5, reason: 'supervisor emergency brake' },
+  { G: 0.5, reason: 'supervisor emergency brake or geofence hover' },
   { G: 0, reason: 'collision, gate strike, obstacle hit, left the arena, kill or missed gate' },
 ];
 
@@ -305,3 +305,97 @@ export function rankItems(items: Omit<ScoredItem, 'score'>[], w: Weights): { ran
 }
 
 export const weightSum = (w: Weights): number => w.S + w.V + w.A + w.E;
+
+// ---- plain-language statements of the summary steps ------------------------------------------
+// Pure string builders (no React), so the wording can be unit-tested against the records.
+
+const f = (x: number, d = 2): string => (Number.isFinite(x) ? x.toFixed(d) : '–');
+const fcm = (x: number, d = 1): string => (Number.isFinite(x) ? `${(x * 100).toFixed(d)} cm` : '–');
+const fpct = (x: number, d = 0): string => (Number.isFinite(x) ? `${(x * 100).toFixed(d)}%` : '–');
+/** "1.6 cm (95% CI 1.6–1.7 cm)" when there is an interval, else the mean alone. */
+const withCI = (s: Stat, fx: (x: number) => string): string => (s.n > 1 && Number.isFinite(s.lo) ? `${fx(s.mean)} (95% CI ${fx(s.lo)}–${fx(s.hi)})` : fx(s.mean));
+
+const cap = (x: string): string => x.charAt(0).toUpperCase() + x.slice(1);
+
+/** Is a lower than b, higher, or are the 95% intervals overlapping (no supported difference)? */
+export function compareStats(a: Stat, b: Stat): 'lower' | 'higher' | 'overlap' {
+  if (!(a.n > 0 && b.n > 0)) return 'overlap';
+  if (a.hi < b.lo) return 'lower';
+  if (a.lo > b.hi) return 'higher';
+  return 'overlap';
+}
+
+export function m1Statements(speed: M1Speed | null, cmp: M1CompareLevel[] | null): string[] {
+  const out: string[] = [];
+  if (speed) {
+    const b = speed.baseline;
+    if (b) out.push(`At the baseline w = ${f(b.w, 3)} rad/s (${f(b.meanSpeed)} m/s mean) the tracking RMSE is ${withCI(b.rmse, (x) => fcm(x))}, ${b.rmse.mean <= 0.02 ? 'within' : 'above'} the 2 cm of Crazyswarm’s published baseline.`);
+    if (speed.breakdown) out.push(`Tracking breaks down (mean RMSE above ${fcm(BREAKDOWN_RMSE, 0)}) at w = ${f(speed.breakdown.w)} rad/s, ${f(speed.breakdown.meanSpeed)} m/s mean speed.`);
+    else out.push(`No breakdown: the mean RMSE stays below ${fcm(BREAKDOWN_RMSE, 0)} up to w = ${f(speed.fastest.w)} rad/s (${f(speed.fastest.meanSpeed)} m/s mean), where it reaches ${fcm(speed.fastest.rmse.mean)}.`);
+    const fast = speed.fastest;
+    out.push(
+      `At the fastest level the error is mostly ${fast.along.mean >= fast.cross.mean ? 'along-track (lagging behind the reference: latency)' : 'cross-track (cutting the corners: thrust limits)'}: along ${fcm(fast.along.mean)}, cross ${fcm(fast.cross.mean)}.`,
+    );
+  }
+  // one sentence per comparison, covering both speed levels
+  const levels = cmp ?? [];
+  const short = (level: string) => level.replace(/\s*\(.*\)$/, '');
+  const compare = (pickA: (l: M1CompareLevel) => CompareRow | undefined, nameA: string, nameB: string, better: string, worse: string) => {
+    const rows = levels.map((l) => ({ l, a: pickA(l), b: l.streamed })).filter((x): x is { l: M1CompareLevel; a: CompareRow; b: CompareRow } => !!x.a && !!x.b);
+    if (!rows.length) return;
+    const parts = rows.map((x) => `${fcm(x.a.rmse.mean)} vs ${fcm(x.b.rmse.mean)} (${short(x.l.level)})`);
+    const verdicts = rows.map((x) => compareStats(x.a.rmse, x.b.rmse));
+    let verdict: string;
+    if (verdicts.every((v) => v === 'lower')) verdict = `${better} (95% intervals do not overlap at ${rows.length > 1 ? 'either speed' : 'this speed'}).`;
+    else if (verdicts.every((v) => v === 'higher')) verdict = `${worse} (95% intervals do not overlap).`;
+    else if (verdicts.every((v) => v === 'overlap')) verdict = 'The difference is within the trial-to-trial spread (95% intervals overlap).';
+    else verdict = cap(`${rows.map((x, i) => (verdicts[i] === 'overlap' ? `no supported difference at ${short(x.l.level)}` : `${nameA} ${verdicts[i]} at ${short(x.l.level)}`)).join('; ')} (95% intervals).`);
+    out.push(`${nameA} vs ${nameB} RMSE: ${parts.join(', ')}. ${verdict}`);
+  };
+  compare((l) => l.uploaded, 'Uploaded', 'streamed', 'Running the trajectory on board removes the radio latency and the lag it causes', 'Uploading did not help here');
+  compare((l) => l.pid, 'PID-like', 'Mellinger-like', 'The PID-like controller did better here', 'Without acceleration feed-forward the controller only reacts to errors after they appear');
+  return out;
+}
+
+const monotone = (xs: number[], dir: 1 | -1): boolean => xs.every((x, i) => i === 0 || dir * (x - xs[i - 1]) >= -1e-12);
+
+export function m2Statements(safety: M2Safety | null, margins: M2MarginCourse[] | null, scaling: M2Scaling | null): string[] {
+  const out: string[] = [];
+  if (safety) {
+    out.push(
+      `${safety.n} filtered T5 trials (3 speeds × 3 margins × latency compensation on/off × 2 filter types): ${safety.withCollision === 0 ? 'no collision' : `${safety.withCollision} with a collision`}${safety.emergencies ? `, ${safety.emergencies} with an emergency brake` : ''}; closest approach ${f(safety.closestMin)} (scaled separation, 1 = edge of the downwash zone).`,
+    );
+    out.push(`The filter intervened on ${fpct(safety.interventionCells[0])} to ${fpct(safety.interventionCells[1])} of control ticks, depending on speed, margin and filter type.`);
+    const costs = safety.cost.filter((c) => c.stat.n > 0);
+    if (costs.length) {
+      const grows = costs.length > 1 && monotone(costs.map((c) => c.stat.mean), 1);
+      out.push(`Cost of safety (M15, extra tracking RMSE from sharing the airspace, default filter): ${costs.map((c) => `${fcm(c.stat.mean)} at margin ×${c.margin}`).join(', ')}${grows ? ': it grows with the margin.' : '.'}`);
+    }
+  }
+  for (const m of margins ?? []) {
+    const first = m.byGate[0];
+    const last = m.byGate[m.byGate.length - 1];
+    if (!first || !last) continue;
+    const drop = last.pass.mean < first.pass.mean - 1e-9;
+    out.push(
+      `${m.course}: gate pass rate ${m.byGate.map((g) => fpct(g.pass.mean)).join(' → ')} as the gate margin grows ${m.byGate.map((g) => f(g.gateMargin)).join(' → ')} m. ${
+        drop ? 'Wider gate margins make the filter treat the gate edges as closer than they are, until it refuses legal passes: that is filter conservatism.' : 'The pass rate does not drop at these margins.'
+      }`,
+    );
+    const cl = m.byObstacle.map((o) => o.clearance.mean).filter(Number.isFinite);
+    if (cl.length > 1) out.push(`${m.course}: obstacle clearance ${f(Math.min(...cl))} to ${f(Math.max(...cl))} m across obstacle margins ${f(m.byObstacle[0].obstacleMargin)} to ${f(m.byObstacle[m.byObstacle.length - 1].obstacleMargin)} m${m.collisions ? `; ${m.collisions} trials with a contact` : ', no contact'}.`);
+  }
+  if (scaling) {
+    for (const sc of scaling.scenarios) {
+      const rows = scaling.rows.filter((r) => r.scenario === sc);
+      if (!rows.length) continue;
+      const a = rows[0];
+      const b = rows[rows.length - 1];
+      const col = rows.reduce((s, r) => s + r.collisions, 0);
+      out.push(
+        `${sc}: intervention rate ${fpct(a.intervention.mean)} with ${a.n} drones, ${fpct(b.intervention.mean)} with ${b.n}; worst 99th-percentile filter solve time ${f(Math.max(...rows.map((r) => r.solveP99.mean)), 1)} ms per tick; ${col ? `${col} collisions` : 'no collisions'}.`,
+      );
+    }
+  }
+  return out;
+}

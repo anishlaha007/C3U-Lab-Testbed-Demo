@@ -320,6 +320,8 @@ export function StripPlot({ groups, height = 190, yLabel, unit = '' }: { groups:
   // deterministic jitter (golden-ratio sequence) so the plot does not reshuffle on re-render
   const pts = groups.map((g, i) => g.values.filter(finite).map((y, j) => ({ x: i + (((j * 0.618034) % 1) - 0.5) * 0.46, y, c: g.name })));
   const means = groups.map((g, i): Row => ({ x: i, ...ciFields('y', g.stat) })).filter((m) => m.y !== null);
+  const ys = [...pts.flat().map((p) => p.y), ...groups.flatMap((g) => [g.stat.lo, g.stat.hi])].filter(finite);
+  const yAxis = niceTicks(Math.min(0, ...ys), Math.max(0, ...ys));
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -336,7 +338,7 @@ export function StripPlot({ groups, height = 190, yLabel, unit = '' }: { groups:
             tick={{ fontSize: 10, fill: th.axis }}
             tickLine={false}
           />
-          <YAxis type="number" dataKey="y" name="value" width={42} tick={{ fontSize: 10, fill: th.axis }} label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', offset: 12, fontSize: 10, fill: th.axis } : undefined} />
+          <YAxis type="number" dataKey="y" name="value" width={42} domain={[yAxis.lo, yAxis.hi]} ticks={yAxis.ticks} interval={0} tickFormatter={tickFmt} tick={{ fontSize: 10, fill: th.axis }} label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', offset: 12, fontSize: 10, fill: th.axis } : undefined} />
           <ZAxis range={[16, 16]} />
           <ReferenceLine y={0} stroke={th.axis} />
           <Tooltip
@@ -368,19 +370,21 @@ export function niceTicks(lo0: number, hi0: number): { lo: number; hi: number; t
   const raw = span / 5;
   const mag = 10 ** Math.floor(Math.log10(raw));
   const step = ([1, 2, 2.5, 5, 10].find((m) => m * mag >= raw) ?? 10) * mag;
-  const lo = Math.floor(lo0 / step - 1e-9) * step;
-  const hi = Math.ceil(hi0 / step + 1e-9) * step;
+  const lo = Math.floor(lo0 / step + 1e-9) * step;
+  const hi = Math.ceil(hi0 / step - 1e-9) * step;
   const ticks: number[] = [];
   for (let v = lo; v <= hi + step * 1e-6; v += step) ticks.push(Number(v.toFixed(10)));
   return { lo, hi, ticks };
 }
-const tickFmt = (v: number) => (Math.abs(v) < 1e-9 ? '0' : Number(v.toFixed(2)).toString());
+const tickFmt = (v: number) => (Math.abs(v) < 1e-9 ? '0' : Number(v.toFixed(3)).toString());
 
 export function FidelityScatter({ groups, height = 220, xLabel, yLabel }: { groups: { name: string; color: string; points: { x: number; y: number }[] }[]; height?: number; xLabel: string; yLabel: string }) {
   const th = useChartTheme();
   const tt = useTooltipStyle();
   const all = groups.flatMap((g) => g.points.flatMap((p) => [p.x, p.y])).filter(finite);
-  const { lo, hi, ticks } = niceTicks(Math.min(0, ...all), Math.max(0, ...all));
+  const [a0, b0] = [Math.min(0, ...all), Math.max(0, ...all)];
+  const pad = 0.04 * Math.max(0.1, b0 - a0); // keep dots off the frame
+  const { lo, hi, ticks } = niceTicks(a0 - pad, b0 + pad);
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">

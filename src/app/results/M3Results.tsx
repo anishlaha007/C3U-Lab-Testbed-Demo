@@ -4,13 +4,45 @@
  * radar and composite scores under the current weights, ranking stability, and the
  * Holm-corrected pairwise tests with the plain-language statements they support.
  */
-import { useMemo, useState } from 'react';
-import { RACE_CONDITIONS, summariseRaceSeries, type RaceConditionRow, type RaceTest } from '../../core/experiments';
+import * as Comlink from 'comlink';
+import { useEffect, useMemo, useState } from 'react';
+import { RACE_CONDITIONS, summariseRaceSeries, type RaceConditionRow, type RaceSeriesSummary, type RaceTest, type TrialRecord } from '../../core/experiments';
 import { compositeScore, rankingStability } from '../../core/metrics/scorecard';
 import { useStore } from '../store';
 import { Badge, Card, cx, fmt, Select } from '../ui';
 import { CIBarChart, ciFields, condColor, condShort, FidelityScatter, finite, RadarOverlay, StripPlot, wilsonStat } from './charts';
+import type { SummaryApi } from './summary.worker';
 import { EmptyState, ExportButtons, Finding, Footer, Note, nRange, okRecords, PartialNote, TD, TD_LEFT, TH, TH_LEFT, useRunRecords, weightsText, WeightSliders } from './common';
+
+let summaryWorker: Comlink.Remote<SummaryApi> | null = null;
+
+/**
+ * Race-series summary computed in a worker (the permutation tests would block the UI for a few
+ * hundred ms per refresh). The previous summary stays on screen until the new one arrives; if
+ * workers are unavailable it falls back to the main thread.
+ */
+function useRaceSummary(recs: TrialRecord[]): RaceSeriesSummary | null {
+  const [sum, setSum] = useState<RaceSeriesSummary | null>(null);
+  useEffect(() => {
+    if (!recs.length) {
+      // a new run starts from zero records: drop the previous run's statistics
+      setSum(null);
+      return;
+    }
+    let live = true;
+    const done = (s: RaceSeriesSummary) => live && setSum(s);
+    try {
+      summaryWorker ??= Comlink.wrap<SummaryApi>(new Worker(new URL('./summary.worker.ts', import.meta.url), { type: 'module' }));
+      summaryWorker.race(recs).then(done, () => done(summariseRaceSeries(recs)));
+    } catch {
+      done(summariseRaceSeries(recs));
+    }
+    return () => {
+      live = false;
+    };
+  }, [recs]);
+  return recs.length ? sum : null;
+}
 
 const color = (cond: string) => condColor(cond, RACE_CONDITIONS.findIndex((c) => c.name === cond));
 const pFmt = (p: number) => (!finite(p) ? '–' : p < 0.001 ? '< 0.001' : p.toFixed(3));
@@ -89,15 +121,16 @@ function ScoreTable({ rows }: { rows: RaceConditionRow[] }) {
 }
 
 export function M3Results() {
-  const { run, recs } = useRunRecords('m3-series');
+  // six charts with a few hundred marks: re-render them less often while the series runs
+  const { run, recs } = useRunRecords('m3-series', 2500);
   const weights = useStore((s) => s.weights);
   const ok = useMemo(() => okRecords(recs), [recs]);
   // the tests do not depend on the weights; only the stability check below does
-  const sum = useMemo(() => summariseRaceSeries(ok), [ok]);
-  const scenarios = useMemo(() => [...new Set(sum.rows.map((r) => r.scenario))], [sum]);
+  const sum = useRaceSummary(ok);
+  const scenarios = useMemo(() => [...new Set((sum?.rows ?? []).map((r) => r.scenario))], [sum]);
   const [pick, setPick] = useState('');
   const scenario = scenarios.includes(pick) ? pick : (scenarios[0] ?? '');
-  const rows = useMemo(() => sum.rows.filter((r) => r.scenario === scenario), [sum, scenario]);
+  const rows = useMemo(() => (sum?.rows ?? []).filter((r) => r.scenario === scenario), [sum, scenario]);
   const stability = useMemo(
     () => (rows.length > 1 ? rankingStability(rows.map((r) => ({ name: r.condition, G: r.G, sub: r.sub })), weights, 200, 99) : null),
     [rows, weights],
@@ -109,6 +142,16 @@ export function M3Results() {
           <EmptyState kinds={['m3-series']}>
             Races drone A against drone B on T4 Pinch, T9 Race loop, C8 Merge and C9 Figure-8 circuit under Independent, Nash and both Stackelberg planners, alternating start positions, and tests which differences are statistically supported.
           </EmptyState>
+        </Card>
+        <Footer planner />
+      </div>
+    );
+  if (!sum)
+    return (
+      <div className="space-y-2.5">
+        <Card title="Race series">
+          <PartialNote run={run} />
+          <p className="mt-1 text-[11px] text-slate-500">Computing statistics for {ok.length} races (bootstrap CIs and permutation tests run in a background worker)…</p>
         </Card>
         <Footer planner />
       </div>
@@ -125,9 +168,16 @@ export function M3Results() {
         <div className="space-y-2">
           <PartialNote run={run} />
           <Select label="Scenario" value={scenario} options={scenarios.map((s) => ({ value: s, label: s }))} onChange={setPick} />
-          <div className="space-y-1">
+          <div>
             {statements.length ? (
-              statements.map((s, i) => <Finding key={i}>{s}</Finding>)
+              <Finding>
+                <div className="mb-0.5 font-semibold">Statistically supported on {scenario} (Holm-corrected, 5% level, n = {n} races per condition):</div>
+                <ul className="list-disc space-y-0.5 pl-4">
+                  {statements.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ul>
+              </Finding>
             ) : (
               <Finding tone="amber">No difference between conditions on {scenario} is statistically supported after Holm correction at the 5% level (n = {n} races per condition).</Finding>
             )}
@@ -195,7 +245,7 @@ export function M3Results() {
           <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300">
             <span>Ranking stability:</span>
             <Badge tone={stability.share >= 0.8 ? 'emerald' : stability.share >= 0.5 ? 'amber' : 'rose'}>{(stability.share * 100).toFixed(0)}%</Badge>
-            <span className="text-[10px] text-slate-500">of 200 random weight vectors keep the ranking {stability.reference.map((i) => condShort(rows[i].condition)).join(' > ')}.</span>
+            <span className="text-[10px] text-slate-500">of 200 random weight vectors keep this ranking (best first): {stability.reference.map((i) => condShort(rows[i].condition)).join(' > ')}</span>
           </div>
         )}
         <details className="mt-2">

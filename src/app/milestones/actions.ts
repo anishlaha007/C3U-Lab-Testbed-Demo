@@ -9,7 +9,7 @@ import { isRaceScenario } from '../../core/race';
 import type { ExperimentKind } from '../../core/experiments';
 import type { SimConfig } from '../../core/types';
 import { engine } from '../engine';
-import { runExperiment } from '../experiments';
+import { runExperiment, useExperiments } from '../experiments';
 import { requestSolve } from '../planner';
 import { useStore, type CameraMode, type RightTab, type Visuals } from '../store';
 
@@ -99,6 +99,22 @@ export function startExperiment(kind: ExperimentKind): void {
   showTab('results');
   void runExperiment(kind);
 }
+
+/**
+ * Entering an experiment step: show the Results tab and start the experiment only if it has never
+ * been run in this session and quick mode is on (a few seconds). A finished, cancelled or running
+ * run is left alone, and full-count runs wait for the explicit Run button.
+ */
+export function autoRun(kind: ExperimentKind): void {
+  showTab('results');
+  const es = useExperiments.getState();
+  if (!es.runs[kind] && es.quick) void runExperiment(kind);
+}
+
+// leaving the guided modes forgets a fly request that has not started yet
+useStore.subscribe((s, prev) => {
+  if (s.mode === 'sandbox' && prev.mode !== 'sandbox') cancelPendingFly();
+});
 
 /**
  * Solve the game for the current race configuration unless EngineSync's automatic solve is
