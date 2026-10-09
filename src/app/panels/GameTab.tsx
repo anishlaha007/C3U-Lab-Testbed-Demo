@@ -8,7 +8,7 @@ import { DRONE_NAMES, PLANNER_LABEL } from '../../core/constants';
 import type { GameMatrix, PlanResult } from '../../core/planners/types';
 import { requestSolve } from '../planner';
 import { useStore } from '../store';
-import { Badge, Button, Card, fmt } from '../ui';
+import { Badge, Button, Card, fmt, Tabs } from '../ui';
 
 function divergingColor(v: number, max: number, dark: boolean): string {
   const t = Math.max(-1, Math.min(1, v / (max || 1)));
@@ -21,48 +21,79 @@ function divergingColor(v: number, max: number, dark: boolean): string {
   return `rgb(${Math.round(neutral[0] + (c[0] - neutral[0]) * a)},${Math.round(neutral[1] + (c[1] - neutral[1]) * a)},${Math.round(neutral[2] + (c[2] - neutral[2]) * a)})`;
 }
 
+type ColourBy = 'payoff' | 'gap';
+
 function PayoffMatrix({ plan, game }: { plan: PlanResult; game: GameMatrix }) {
   const dark = useStore((s) => s.dark);
   const setHover = useStore((s) => s.setHoverCell);
   const [hover, setLocal] = useState<[number, number] | null>(null);
-  const M1 = game.payoff1.length;
-  const M2 = game.payoff1[0]?.length ?? 0;
+  // Section 7.3 asks for a heatmap of payoff_1; the gap view separates progress from risk
+  const [colourBy, setColourBy] = useState<ColourBy>('payoff');
+  const [hideInvalid, setHideInvalid] = useState(true);
   const v1 = plan.candidates[0].map((c) => c.valid);
   const v2 = plan.candidates[1].map((c) => c.valid);
-  // colour by the progress-gap part of the payoff; cells with collision risk are hatched
-  // separately so the large penalty does not wash out the whole matrix
-  const maxAbs = useMemo(() => {
+  // displayed rows / columns -> candidate indices
+  const rows = useMemo(() => v1.map((v, i) => (v || !hideInvalid ? i : -1)).filter((i) => i >= 0), [v1, hideInvalid]);
+  const cols = useMemo(() => v2.map((v, j) => (v || !hideInvalid ? j : -1)).filter((j) => j >= 0), [v2, hideInvalid]);
+  const rowPos = useMemo(() => new Map(rows.map((i, r) => [i, r])), [rows]);
+  const colPos = useMemo(() => new Map(cols.map((j, c) => [j, c])), [cols]);
+  const value = (i: number, j: number) => (colourBy === 'payoff' ? game.payoff1[i][j] : game.gap[i][j]);
+  const { maxAbs, maxRisk } = useMemo(() => {
     let m = 0;
-    for (let i = 0; i < M1; i++) for (let j = 0; j < M2; j++) if (v1[i] && v2[j]) m = Math.max(m, Math.abs(game.gap[i][j]));
-    return m || 1;
-  }, [game, M1, M2, v1, v2]);
+    let r = 0;
+    for (const i of rows) for (const j of cols) if (v1[i] && v2[j]) {
+      m = Math.max(m, Math.abs(colourBy === 'payoff' ? game.payoff1[i][j] : game.gap[i][j]));
+      r = Math.max(r, game.risk[i][j]);
+    }
+    return { maxAbs: m || 1, maxRisk: r || 1 };
+  }, [game, rows, cols, v1, v2, colourBy]);
+  // the payoff spans the progress gap (metres) and P x risk (tens to hundreds): a signed log scale
+  // keeps both visible; the gap alone is shown linearly
+  const scaled = (v: number) => (colourBy === 'payoff' ? (Math.sign(v) * Math.log1p(Math.abs(v))) / Math.log1p(maxAbs) : v / maxAbs);
   const W = 360;
-  const cell = Math.max(4, Math.floor((W - 24) / Math.max(M1, M2)));
-  const size = cell * Math.max(M1, M2);
+  const n = Math.max(rows.length, cols.length, 1);
+  const cell = Math.max(4, Math.floor((W - 24) / n));
   const nashSet = new Set(game.nash.map(([i, j]) => `${i},${j}`));
   const [ci, cj] = plan.choice;
   const h = hover;
+  const at = (i: number, j: number) => ({ x: (colPos.get(j) ?? -1) * cell, y: (rowPos.get(i) ?? -1) * cell, shown: rowPos.has(i) && colPos.has(j) });
   return (
     <div>
-      <svg width={size + 24} height={size + 24} className="select-none" onMouseLeave={() => (setLocal(null), setHover(null))}>
-        <text x={24 + size / 2} y={9} fontSize={9} textAnchor="middle" fill="#94a3b8">
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+        <span>Colour</span>
+        <Tabs
+          small
+          value={colourBy}
+          options={[
+            { value: 'payoff', label: 'payoff of A', title: 'payoff_1 = s_A − s_B − P × risk (Section 7.2), signed log scale' },
+            { value: 'gap', label: 'progress gap', title: 's_A − s_B at the horizon, without the risk term' },
+          ]}
+          onChange={setColourBy}
+        />
+        <label className="ml-auto flex items-center gap-1">
+          <input type="checkbox" checked={hideInvalid} onChange={(e) => setHideInvalid(e.target.checked)} />
+          hide invalid candidates
+        </label>
+      </div>
+      <svg width={cols.length * cell + 24} height={rows.length * cell + 24} className="select-none" onMouseLeave={() => (setLocal(null), setHover(null))}>
+        <text x={24 + (cols.length * cell) / 2} y={9} fontSize={9} textAnchor="middle" fill="#94a3b8">
           drone B candidate j →
         </text>
-        <text x={8} y={24 + size / 2} fontSize={9} textAnchor="middle" fill="#94a3b8" transform={`rotate(-90 8 ${24 + size / 2})`}>
+        <text x={8} y={24 + (rows.length * cell) / 2} fontSize={9} textAnchor="middle" fill="#94a3b8" transform={`rotate(-90 8 ${24 + (rows.length * cell) / 2})`}>
           drone A candidate i →
         </text>
         <g transform="translate(20,14)">
-          {Array.from({ length: M1 }, (_, i) =>
-            Array.from({ length: M2 }, (_, j) => {
+          {rows.map((i, r) =>
+            cols.map((j, c) => {
               const valid = v1[i] && v2[j];
               return (
                 <rect
                   key={`${i}-${j}`}
-                  x={j * cell}
-                  y={i * cell}
+                  x={c * cell}
+                  y={r * cell}
                   width={cell}
                   height={cell}
-                  fill={valid ? divergingColor(game.gap[i][j], maxAbs, dark) : dark ? '#0f172a' : '#e2e8f0'}
+                  fill={valid ? divergingColor(scaled(value(i, j)), 1, dark) : dark ? '#0f172a' : '#e2e8f0'}
                   stroke={dark ? '#0b1220' : '#ffffff'}
                   strokeWidth={0.4}
                   onMouseEnter={() => {
@@ -73,31 +104,48 @@ function PayoffMatrix({ plan, game }: { plan: PlanResult; game: GameMatrix }) {
               );
             }),
           )}
-          {/* collision risk: hatched cells */}
-          {Array.from({ length: M1 }, (_, i) =>
-            Array.from({ length: M2 }, (_, j) =>
+          {/* collision risk: hatching whose strength grows with the time inside the risk margin */}
+          {rows.map((i, r) =>
+            cols.map((j, c) =>
               v1[i] && v2[j] && game.risk[i][j] > 0 ? (
-                <path key={`r${i}-${j}`} d={`M${j * cell},${(i + 1) * cell} L${(j + 1) * cell},${i * cell}`} stroke="#ef4444" strokeWidth={Math.max(0.6, cell * 0.12)} opacity={Math.min(1, 0.35 + game.risk[i][j])} pointerEvents="none" />
+                <path
+                  key={`r${i}-${j}`}
+                  d={`M${c * cell},${(r + 1) * cell} L${(c + 1) * cell},${r * cell}`}
+                  stroke="#ef4444"
+                  strokeWidth={Math.max(0.6, cell * 0.12)}
+                  opacity={0.12 + 0.88 * Math.min(1, game.risk[i][j] / maxRisk)}
+                  pointerEvents="none"
+                />
               ) : null,
             ),
           )}
           {/* best-response markers: drone A's reply to each column (dot), drone B's reply to each row (ring) */}
-          {game.br1.map((i, j) => (i >= 0 && v2[j] ? <circle key={`b1${j}`} cx={j * cell + cell / 2} cy={i * cell + cell / 2} r={Math.max(1, cell * 0.16)} fill="#0f172a" opacity={0.75} /> : null))}
-          {game.br2.map((j, i) => (j >= 0 && v1[i] ? <circle key={`b2${i}`} cx={j * cell + cell / 2} cy={i * cell + cell / 2} r={Math.max(1.5, cell * 0.3)} fill="none" stroke="#f8fafc" strokeWidth={1} opacity={0.85} /> : null))}
+          {game.br1.map((i, j) => {
+            const p = at(i, j);
+            return i >= 0 && v2[j] && p.shown ? <circle key={`b1${j}`} cx={p.x + cell / 2} cy={p.y + cell / 2} r={Math.max(1, cell * 0.16)} fill="#0f172a" opacity={0.75} /> : null;
+          })}
+          {game.br2.map((j, i) => {
+            const p = at(i, j);
+            return j >= 0 && v1[i] && p.shown ? <circle key={`b2${i}`} cx={p.x + cell / 2} cy={p.y + cell / 2} r={Math.max(1.5, cell * 0.3)} fill="none" stroke="#f8fafc" strokeWidth={1} opacity={0.85} /> : null;
+          })}
           {/* Nash cells */}
           {[...nashSet].map((k) => {
             const [i, j] = k.split(',').map(Number);
-            return <rect key={`n${k}`} x={j * cell + 0.5} y={i * cell + 0.5} width={cell - 1} height={cell - 1} fill="none" stroke="#22c55e" strokeWidth={2} />;
+            const p = at(i, j);
+            return p.shown ? <rect key={`n${k}`} x={p.x + 0.5} y={p.y + 0.5} width={cell - 1} height={cell - 1} fill="none" stroke="#22c55e" strokeWidth={2} /> : null;
           })}
           {/* Stackelberg picks */}
-          {game.stackelberg.map((s) => (
-            <text key={`s${s.leader}`} x={s.j * cell + cell / 2} y={s.i * cell + cell * 0.78} fontSize={Math.max(8, cell * 0.9)} textAnchor="middle" fill={s.leader === 0 ? '#facc15' : '#f472b6'}>
-              {s.leader === 0 ? '★' : '☆'}
-            </text>
-          ))}
+          {game.stackelberg.map((st) => {
+            const p = at(st.i, st.j);
+            return p.shown ? (
+              <text key={`s${st.leader}`} x={p.x + cell / 2} y={p.y + cell * 0.78} fontSize={Math.max(8, cell * 0.9)} textAnchor="middle" fill={st.leader === 0 ? '#facc15' : '#f472b6'}>
+                {st.leader === 0 ? '★' : '☆'}
+              </text>
+            ) : null;
+          })}
           {/* flown cell */}
-          {ci >= 0 && cj >= 0 && <rect x={cj * cell - 1.5} y={ci * cell - 1.5} width={cell + 3} height={cell + 3} fill="none" stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="3 2" />}
-          {h && <rect x={h[1] * cell} y={h[0] * cell} width={cell} height={cell} fill="none" stroke="#e2e8f0" strokeWidth={1.2} />}
+          {ci >= 0 && cj >= 0 && at(ci, cj).shown && <rect x={at(ci, cj).x - 1.5} y={at(ci, cj).y - 1.5} width={cell + 3} height={cell + 3} fill="none" stroke="#38bdf8" strokeWidth={1.5} strokeDasharray="3 2" />}
+          {h && at(h[0], h[1]).shown && <rect x={at(h[0], h[1]).x} y={at(h[0], h[1]).y} width={cell} height={cell} fill="none" stroke="#e2e8f0" strokeWidth={1.2} />}
         </g>
       </svg>
       <div className="mt-1 min-h-[52px] rounded bg-slate-100 p-1.5 font-mono text-[10px] leading-snug dark:bg-slate-900">
@@ -118,14 +166,19 @@ function PayoffMatrix({ plan, game }: { plan: PlanResult; game: GameMatrix }) {
         )}
       </div>
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
-        <span>colour: progress gap s_A − s_B (orange: A ahead, blue: B ahead)</span>
-        <span className="text-rose-500">╱ collision risk (penalised)</span>
+        <span>{colourBy === 'payoff' ? 'colour: payoff of A (orange: good for A, blue: bad for A; signed log scale)' : 'colour: progress gap s_A − s_B (orange: A ahead, blue: B ahead)'}</span>
+        <span className="text-rose-500">╱ time inside the risk margin (stronger = longer)</span>
         <span>● A's best reply</span>
         <span>○ B's best reply</span>
         <span className="text-emerald-500">□ pure Nash</span>
         <span className="text-yellow-400">★ Stackelberg A leads</span>
         <span className="text-pink-400">☆ Stackelberg B leads</span>
         <span className="text-sky-400">⬚ flown</span>
+        {hideInvalid && (v1.some((v) => !v) || v2.some((v) => !v)) && (
+          <span>
+            {v1.filter((v) => !v).length + v2.filter((v) => !v).length} invalid candidates hidden
+          </span>
+        )}
       </div>
     </div>
   );
@@ -162,7 +215,7 @@ export function GameTab() {
       {!plan && <div className="text-xs text-slate-500">{planStatus === 'solving' ? 'Solving the game…' : 'Choose a race scenario (T4, T9, T12-T14) to see the game.'}</div>}
       {plan && !game && <div className="text-xs text-slate-500">The payoff matrix is shown for two drones; with {config.drones.length} drones the N-drone extensions (iterated best response, priority chain) are used.</div>}
       {plan && game && (
-        <Card title={`Payoff matrix of drone A (${game.payoff1.length} × ${game.payoff1[0]?.length ?? 0})`}>
+        <Card title={`Payoff matrix of drone A (${game.payoff1.length} × ${game.payoff1[0]?.length ?? 0} candidates)`}>
           <PayoffMatrix plan={plan} game={game} />
         </Card>
       )}

@@ -53,10 +53,17 @@ export function TimeChart({
   cursorT?: number;
 }) {
   const th = useChartTheme();
+  const legend = series.length > 1;
   return (
-    <div style={{ height }}>
+    <div className="relative" style={{ height }}>
+      {/* unit above the axis: a rotated axis label collides with the tick labels at this size */}
+      {yLabel && (
+        <span className="pointer-events-none absolute top-0 left-1 text-[10px]" style={{ color: th.axis }}>
+          {yLabel}
+        </span>
+      )}
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 6, right: 8, bottom: 14, left: 0 }}>
+        <LineChart data={data} margin={{ top: legend ? 2 : 12, right: 8, bottom: 14, left: 0 }}>
           <CartesianGrid stroke={th.grid} strokeDasharray="3 3" />
           <XAxis
             dataKey={xKey}
@@ -70,15 +77,16 @@ export function TimeChart({
             width={44}
             tick={{ fontSize: 10, fill: th.axis }}
             domain={yDomain ?? ['auto', 'auto']}
+            // show every tick: the default overlap culling drops one of five and leaves uneven gaps
+            interval={0}
             tickFormatter={(v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(1) : v.toFixed(2))}
-            label={yLabel ? { value: yLabel, angle: -90, position: 'insideLeft', offset: 12, fontSize: 10, fill: th.axis } : undefined}
           />
           <Tooltip
             contentStyle={{ background: th.tooltipBg, border: `1px solid ${th.tooltipBorder}`, fontSize: 11 }}
             labelFormatter={(v) => `${xKey === 't' ? 't = ' : ''}${Number(v).toFixed(2)}`}
             formatter={(v) => (typeof v === 'number' ? v.toFixed(3) : String(v))}
           />
-          {series.length > 1 && <Legend wrapperStyle={{ fontSize: 10 }} iconSize={8} />}
+          {legend && <Legend verticalAlign="top" align="right" height={16} wrapperStyle={{ fontSize: 10 }} iconSize={8} />}
           {refLines.map((r, i) => (
             <ReferenceLine key={i} y={r.y} stroke={r.color ?? '#ef4444'} strokeDasharray="4 3" label={r.label ? { value: r.label, fontSize: 9, fill: r.color ?? '#ef4444', position: 'insideTopRight' } : undefined} />
           ))}

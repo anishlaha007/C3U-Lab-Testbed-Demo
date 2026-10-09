@@ -34,21 +34,27 @@ export async function requestSolve(auto = false): Promise<void> {
     return;
   }
   const id = ++requestId;
+  // progress callbacks travel on their own comlink channel and can arrive after the result;
+  // a late one must not flip a finished solve back to 'solving'
+  let finished = false;
   st.setPlanStatus('solving', 0);
   try {
     const res = await getApi().solve(
       cfg,
       Comlink.proxy((f: number) => {
-        if (id === requestId) useStore.getState().setPlanStatus('solving', f);
+        if (id === requestId && !finished) useStore.getState().setPlanStatus('solving', f);
       }),
     );
+    finished = true;
     if (id !== requestId) return; // a newer request superseded this one
     const now = useStore.getState();
+    // the configuration changed while solving: EngineSync requests a fresh solve for it
     if (res.key !== planKey(now.config)) return;
     now.setPlan(res);
     now.setPlanStatus('done', 1);
     if (!auto) now.toast(`Plan solved in ${res.solveMs.toFixed(0)} ms. ${res.note}`, 'success');
   } catch (e) {
+    finished = true;
     if (id !== requestId) return;
     const msg = e instanceof Error ? e.message : String(e);
     useStore.getState().setPlanStatus('error', 0, msg);
