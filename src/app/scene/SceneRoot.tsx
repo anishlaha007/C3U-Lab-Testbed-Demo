@@ -109,8 +109,10 @@ function maxSpeed(tr: { vx: Float64Array; vy: Float64Array; vz: Float64Array }):
 export function SceneRoot({ dark }: { dark: boolean }) {
   const bg = dark ? '#070b14' : '#e8eef5';
   const fpv = useStore((s) => s.camera === 'fpv');
+  // the course editor is a full-screen modal: stop rendering (and the simulation clock) behind it
+  const paused = useStore((s) => s.editorOpen);
   return (
-    <Canvas shadows dpr={[1, 2]} camera={{ position: [5.5, 4.2, 6.5], fov: 45, near: 0.02, far: 200 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
+    <Canvas frameloop={paused ? 'never' : 'always'} shadows dpr={[1, 2]} camera={{ position: [5.5, 4.2, 6.5], fov: 45, near: 0.02, far: 200 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
       <color attach="background" args={[bg]} />
       <fog attach="fog" args={[bg, 20, 45]} />
       <ambientLight intensity={dark ? 0.55 : 0.7} />

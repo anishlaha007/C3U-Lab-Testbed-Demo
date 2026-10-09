@@ -106,6 +106,12 @@ Non-obvious choices made while building the simulator, with the reason for each.
   plus the drone radius would otherwise push the drone off a line planned closer than that.
 - **Voxel A\*** at 0.1 m; the grid is built by iterating each primitive's bounds (a full scan took 1.5 s
   per course; now ≤ 150 ms).
+- **Course editor checks** run in a Web Worker (`courseCheck.worker.ts`): a course with a gate through the
+  net or a blocked corridor drives the racing line into many A* detours (seconds of work). A newer edit
+  terminates the running check instead of queueing it. The editor checks feasibility with the weakest
+  drone's thrust-to-weight ratio (as the race does) and warns that the racing line does not avoid moving
+  obstacles (their timing is handled by the planner's validity check and the filter). The 3D canvas
+  stops rendering while the full-screen editor is open.
 - **Course arenas resize automatically** when a course needs more room than the configured arena
   (C9, C10), and the geofence follows.
 - **Intersection scenario** drones start a quarter period apart (base phase π/2), otherwise both started
