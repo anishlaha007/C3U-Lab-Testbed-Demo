@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useRef } from 'react';
 import { HONESTY_LABEL, PLANNER_LABEL } from '../core/constants';
 import { evaluateTrial } from '../core/metrics/scorecard';
 import { engine } from './engine';
+import { computeCostOfSafety } from './experiments';
+import { FileDrop } from './panels/FileDrop';
 import { LeftSidebar, PLANNER_TYPES } from './panels/LeftSidebar';
 import { RightPanel } from './panels/RightPanel';
 import { Timeline } from './panels/Timeline';
@@ -54,7 +56,9 @@ function EngineSync() {
         const ev = evaluateTrial(log, st.weights);
         const cfg = engine.config ?? st.config;
         if (st.recording) {
-          st.addTrial({ name: `${cfg.scenario.preset || cfg.scenario.type} #${log.seed}`, condition: conditionLabel(cfg), config: cfg, log, evaluation: ev });
+          const id = st.addTrial({ name: `${cfg.scenario.preset || cfg.scenario.type} #${log.seed}`, condition: conditionLabel(cfg), config: cfg, log, evaluation: ev });
+          const trajs = engine.build?.trajectories;
+          if (trajs && trajs.length > 1) void computeCostOfSafety(id, cfg, trajs, ev.tracking.map((t) => t.rmse));
         }
         const rm = ev.tracking.map((t) => t.rmse).filter(Number.isFinite);
         const rmse = rm.length ? rm.reduce((a, b) => a + b, 0) / rm.length : NaN;
@@ -192,6 +196,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col text-slate-900 dark:text-slate-100">
       <EngineSync />
+      <FileDrop />
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <LeftSidebar />

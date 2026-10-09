@@ -5,6 +5,8 @@ import { SCENARIO_PRESETS } from '../../core/presets';
 import { engine } from '../engine';
 import { copyLink, takeScreenshot } from '../share';
 import { useStore, type Mode } from '../store';
+import { ExportMenu } from './ExportMenu';
+import { ImportButton } from './FileDrop';
 import { Button, Select, Tabs, Tip } from '../ui';
 
 const MODES: { value: Mode; label: string; title: string }[] = [
@@ -111,6 +113,8 @@ export function TopBar() {
 
       <div className="ml-auto flex items-center gap-1.5">
         <span className="hidden rounded bg-amber-100 px-2 py-0.5 text-[10px] text-amber-900 xl:inline dark:bg-amber-500/15 dark:text-amber-300">{HONESTY_LABEL}</span>
+        <ImportButton small />
+        <ExportMenu />
         <Button small kind="ghost" title="Copy a link to this setup" onClick={() => copyLink(config).then((ok) => toast(ok ? 'Link to this setup copied.' : 'Could not copy the link.', ok ? 'success' : 'error'))}>
           Link
         </Button>
