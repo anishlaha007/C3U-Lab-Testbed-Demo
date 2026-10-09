@@ -52,6 +52,10 @@ export function perpVelocity(w: Vec3, c: CoreClosest): Vec3 {
       const s = w.x * e.x + w.y * e.y + w.z * e.z;
       return v3(w.x - s * e.x, w.y - s * e.y, w.z - s * e.z);
     }
+    case 'face': {
+      const s = w.x * c.n.x + w.y * c.n.y + w.z * c.n.z;
+      return v3(s * c.n.x, s * c.n.y, s * c.n.z);
+    }
     default:
       return w;
   }

@@ -28,8 +28,9 @@ export type Primitive =
  * Closest-point information from p to a primitive's core shape.
  * - delta = p - q (q on the core shape), rho = |delta|
  * - free: which relative-velocity components change the distance to first order:
- *   'full' (point-like), 'xy' (vertical axis), 'line' (segment interior, direction lineDir),
- *   'plane' (planar, n fixed)
+ *   'full' (point-like: sphere centre, segment end, box corner), 'xy' (vertical axis),
+ *   'line' (segment interior or box edge, direction lineDir), 'face' (box face: only the normal
+ *   component n n^T w matters), 'plane' (half-space, n fixed)
  * - R: the primitive's own radius (0 for boxes and planes)
  */
 export interface CoreClosest {
@@ -37,7 +38,7 @@ export interface CoreClosest {
   delta: Vec3;
   rho: number;
   R: number;
-  free: 'full' | 'xy' | 'line' | 'plane';
+  free: 'full' | 'xy' | 'line' | 'face' | 'plane';
   lineDir?: Vec3;
   /** Outward unit normal (from the shape towards p). */
   n: Vec3;
@@ -105,6 +106,11 @@ export function coreClosest(p: Vec3, prim: Primitive): CoreClosest {
       let qy = clamp(ly, -prim.half.y, prim.half.y);
       let qz = clamp(lz, -prim.half.z, prim.half.z);
       const inside = qx === lx && qy === ly && qz === lz;
+      // which local axes were clamped: 1 = face, 2 = edge (along the free axis), 3 = corner
+      const cx = qx !== lx;
+      const cy = qy !== ly;
+      const cz = qz !== lz;
+      const nClamped = (cx ? 1 : 0) + (cy ? 1 : 0) + (cz ? 1 : 0);
       if (inside) {
         // push to the nearest face
         const px = prim.half.x - Math.abs(lx);
@@ -121,6 +127,12 @@ export function coreClosest(p: Vec3, prim: Primitive): CoreClosest {
       if (inside) {
         n = v3(-n.x, -n.y, -n.z);
         rho = -rho;
+      }
+      if (nClamped === 1 || inside) return { q, delta: d, rho, R: 0, free: 'face', n, vel: prim.vel, acc: prim.acc };
+      if (nClamped === 2) {
+        // edge: direction of the unclamped local axis, in world coordinates
+        const lineDir = !cx ? v3(c, s, 0) : !cy ? v3(-s, c, 0) : v3(0, 0, 1);
+        return { q, delta: d, rho, R: 0, free: 'line', lineDir, n, vel: prim.vel, acc: prim.acc };
       }
       return { q, delta: d, rho, R: 0, free: 'full', n, vel: prim.vel, acc: prim.acc };
     }

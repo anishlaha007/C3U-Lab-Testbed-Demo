@@ -94,8 +94,8 @@ export function gatePrimitives(g: Gate, gateIndex: number, ceilingZ: number): Pr
       out.push({ kind: 'capsule', a: foot, b: end, r: POLE_R, vel: zero, acc: zero, tag: { source: 'gate', id: `${g.id}:leg${k}`, gateIndex, part: 'leg' } });
     }
   } else {
-    // two cables from the top flat edge's corners to the ceiling truss
-    for (const k of [2, 3]) {
+    // two cables from the top flat edge's corners (vertices 1 and 2) to the ceiling truss
+    for (const k of [1, 2]) {
       const a = f.verts[k];
       out.push({ kind: 'capsule', a, b: v3(a.x, a.y, ceilingZ), r: CABLE_R, vel: zero, acc: zero, tag: { source: 'gate', id: `${g.id}:cable${k}`, gateIndex, part: 'cable' } });
     }

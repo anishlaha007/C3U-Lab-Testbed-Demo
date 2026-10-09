@@ -13,6 +13,8 @@ export default defineConfig({
   },
   test: {
     include: ['src/tests/**/*.test.ts'],
+    // scratch exploration files (src/tests/_*.test.ts) are excluded unless run explicitly
+    exclude: process.env.VITEST_SCRATCH ? [] : ['src/tests/**/_*.test.ts', 'node_modules/**'],
     environment: 'node',
     testTimeout: 60000,
   },

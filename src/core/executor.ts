@@ -5,9 +5,9 @@
  * Reference modes per drone:
  *  - nominal:   send the planned setpoint (p_nom, v_nom, a_nom).
  *  - filtered:  the filter changed the command. The executor integrates the safe feed-forward
- *               acceleration (a_nom + correction) into its own reference (p_f, v_f), so the
- *               onboard position loop does not fight the filter, and sends the feed-forward that
- *               makes the onboard law produce exactly u_safe.
+ *               acceleration (a_nom + return + correction) into its own reference (p_f, v_f), so
+ *               the onboard position loop does not fight the filter, and sends the feed-forward
+ *               that makes the onboard law produce exactly u_safe.
  *  - blending:  the filter has been idle for 0.3 s; the offset to the nominal reference decays
  *               with a first-order time constant of 0.5 s (kinematically consistent setpoint),
  *               then the mode returns to nominal.
@@ -19,6 +19,14 @@ import { v3, type Vec3 } from './vec';
 
 export const IDLE_BEFORE_BLEND = 0.3;
 export const BLEND_TAU = 0.5;
+/**
+ * While the filtered reference is active, the nominal input includes a critically damped pull
+ * back to the plan (natural frequency 2 rad/s, i.e. the 0.5 s blend time constant), so repeated
+ * short interventions near gate frames do not accumulate into drift. The filter still has the
+ * final say over it.
+ */
+export const RETURN_KP = 4;
+export const RETURN_KD = 4;
 
 export type RefMode = 'nominal' | 'filtered' | 'blending';
 
@@ -45,10 +53,22 @@ export class Executor {
     return sampleScaled(this.traj, tRace, this.k);
   }
 
+  /** Gentle return of the filtered reference towards the plan (critically damped, ~0.5 s). */
+  private returnAccel: Vec3 = v3();
+
   /** Reference that would be sent this tick without a new intervention. */
   candidate(tRace: number): Setpoint {
     const nom = this.nominal(tRace);
-    if (this.mode === 'filtered') return { p: { ...this.pf }, v: { ...this.vf }, a: nom.a, yaw: nom.yaw };
+    this.returnAccel = v3();
+    if (this.mode === 'filtered') {
+      // the plan still wants to get back on its path: K_r (p_nom - p_f) + D_r (v_nom - v_f)
+      this.returnAccel = v3(
+        RETURN_KP * (nom.p.x - this.pf.x) + RETURN_KD * (nom.v.x - this.vf.x),
+        RETURN_KP * (nom.p.y - this.pf.y) + RETURN_KD * (nom.v.y - this.vf.y),
+        RETURN_KP * (nom.p.z - this.pf.z) + RETURN_KD * (nom.v.z - this.vf.z),
+      );
+      return { p: { ...this.pf }, v: { ...this.vf }, a: nom.a, yaw: nom.yaw };
+    }
     if (this.mode === 'blending') return this.blended(nom);
     return nom;
   }
@@ -71,7 +91,8 @@ export class Executor {
   /** Nominal acceleration for the filter: what the onboard law would command for the candidate reference. */
   uNominal(cand: Setpoint, pHat: Vec3, vHat: Vec3): Vec3 {
     if (this.pure) return { ...cand.a };
-    return onboardLaw(this.controller, cand, pHat, vHat);
+    const u = onboardLaw(this.controller, cand, pHat, vHat);
+    return v3(u.x + this.returnAccel.x, u.y + this.returnAccel.y, u.z + this.returnAccel.z);
   }
 
   /**

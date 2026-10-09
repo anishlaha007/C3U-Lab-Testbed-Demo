@@ -226,7 +226,8 @@ export class Simulation {
       const p0 = droneCfgs[i].start ? { ...droneCfgs[i].start! } : sp0.p;
       const state = makeDroneState(p0, sp0.v, sp0.a, sp0.yaw, preset.twr);
       const visits: GateVisit[] = [];
-      for (let l = 0; l < laps; l++) visits.push(...visitsPerLap);
+      const own = b.course?.droneSequences?.[i] ?? visitsPerLap;
+      for (let l = 0; l < laps; l++) visits.push(...own);
       const d: SimDrone = {
         id: i,
         twr0: preset.twr,

@@ -135,3 +135,28 @@ describe('Hildreth QP (Section 8.3)', () => {
     }
   });
 });
+
+describe('obstacle CBFs', () => {
+  it('box face: tangential motion does not mask an approaching panel', async () => {
+    const { coreClosest } = await import('../core/geometry');
+    const { ecbfObstacle } = await import('../core/safety/ecbf');
+    // panel 0.6 m long along x, moving towards a drone that flies fast along the face
+    const prim = { kind: 'box' as const, c: v3(0, 0.3, 1), half: v3(0.3, 0.03, 0.35), yaw: 0, vel: v3(0, -1.1, 0), acc: v3(), tag: { source: 'obstacle' as const, id: 'slider' } };
+    const p = v3(0, 0, 1);
+    const c = coreClosest(p, prim);
+    expect(c.free).toBe('face');
+    const con = ecbfObstacle(0, p, v3(1.5, 0, 0), c, 0.1, 8);
+    // zero input must violate the constraint: the drone has to move away from the panel
+    expect(0).toBeLessThan(con.b);
+    expect(con.a.y).toBeLessThan(0);
+  });
+  it('box edge and corner are classified', async () => {
+    const { coreClosest } = await import('../core/geometry');
+    const prim = { kind: 'box' as const, c: v3(0, 0, 1), half: v3(0.5, 0.5, 0.5), yaw: 0.3, vel: v3(), acc: v3(), tag: { source: 'obstacle' as const, id: 'b' } };
+    expect(coreClosest(v3(0, 0, 3), prim).free).toBe('face');
+    const edge = coreClosest(v3(2 * Math.cos(0.3) - 2 * Math.sin(0.3), 2 * Math.sin(0.3) + 2 * Math.cos(0.3), 1), prim);
+    expect(edge.free).toBe('line');
+    expect(Math.abs(edge.lineDir!.z)).toBeCloseTo(1, 9);
+    expect(coreClosest(v3(3, 3, 3), prim).free).toBe('full');
+  });
+});

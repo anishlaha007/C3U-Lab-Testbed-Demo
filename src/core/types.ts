@@ -116,6 +116,10 @@ export interface Course {
   gates: Gate[];
   obstacles: Obstacle[];
   sequence: GateVisit[];
+  /** Per-drone sequence overrides (e.g. the merge course: each drone has its own entry gate). */
+  droneSequences?: GateVisit[][];
+  /** Extra racing-line waypoints inserted after a given visit (index into `sequence`). */
+  via?: { after: number; points: Vec3[] }[];
   /** Closed circuit (the racing line loops). */
   closed: boolean;
   laps: number;
@@ -290,6 +294,8 @@ export interface PlannerConfig {
   penalty: number;
   replan: boolean;
   replanDt: number;
+  /** Swap the start sides of drones A and B (race series alternate start positions). */
+  swapStarts: boolean;
 }
 
 export interface SimConfig {

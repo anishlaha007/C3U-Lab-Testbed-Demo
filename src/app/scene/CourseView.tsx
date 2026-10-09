@@ -117,7 +117,7 @@ function GateMesh({ gate, index, number, ceiling }: { gate: Gate; index: number;
           })}
         </>
       ) : (
-        [2, 3].map((k) => <Tube key={`cab${k}`} a={f.verts[k]} b={{ x: f.verts[k].x, y: f.verts[k].y, z: ceiling }} r={0.004} color="#cbd5e1" />)
+        [1, 2].map((k) => <Tube key={`cab${k}`} a={f.verts[k]} b={{ x: f.verts[k].x, y: f.verts[k].y, z: ceiling }} r={0.004} color="#cbd5e1" />)
       )}
       {/* number badge above the gate */}
       <sprite position={toThreeVec({ x: top.x, y: top.y, z: top.z + 0.16 })} scale={[0.2, 0.2, 0.2]}>

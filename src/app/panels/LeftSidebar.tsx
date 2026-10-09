@@ -1,5 +1,6 @@
 /** Left sidebar: every configuration section, each with a one-sentence concept tooltip. */
 import { DRONE_COLORS, DRONE_NAMES, PRESETS } from '../../core/constants';
+import { recommendedSpeed } from '../../core/courseLibrary';
 import { COURSE_INFO } from '../../core/courses';
 import { latencies } from '../../core/defaults';
 import { figure8MaxW } from '../../core/trajectories/figure8';
@@ -61,8 +62,10 @@ export function LeftSidebar() {
           onChange={(v) =>
             set((c) => {
               c.course.courseId = v;
-              if (v !== 'none') c.scenario.type = 'ringCircuit';
-              else if (c.scenario.type === 'ringCircuit') c.scenario.type = 'figure8';
+              if (v !== 'none') {
+                c.scenario.type = 'ringCircuit';
+                c.scenario.targetSpeed = recommendedSpeed(c.course);
+              } else if (c.scenario.type === 'ringCircuit') c.scenario.type = 'figure8';
             })
           }
         />

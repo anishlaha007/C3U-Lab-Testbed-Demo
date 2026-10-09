@@ -3,6 +3,7 @@
  */
 import { DRONE_COLORS } from './constants';
 import { cloneConfig, defaultConfig, defaultDrone } from './defaults';
+import { recommendedSpeed } from './courseLibrary';
 import type { CourseId, SimConfig } from './types';
 
 export interface ScenarioPreset {
@@ -22,6 +23,7 @@ function course(c: SimConfig, id: CourseId, n: number): void {
   c.scenario.type = 'ringCircuit';
   c.course.courseId = id;
   c.scenario.timeScale = 1;
+  c.scenario.targetSpeed = recommendedSpeed(c.course);
 }
 
 export const SCENARIO_PRESETS: ScenarioPreset[] = [

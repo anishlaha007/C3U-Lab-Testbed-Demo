@@ -54,6 +54,7 @@ export function defaultConfig(): SimConfig {
       penalty: 50,
       replan: false,
       replanDt: 0.5,
+      swapStarts: false,
     },
     system: {
       totalLatency: 0.025,
@@ -108,6 +109,13 @@ export function defaultConfig(): SimConfig {
 export function latencies(sys: SystemConfig): { tauS: number; tauC: number } {
   if (sys.advancedLatency) return { tauS: Math.max(0, sys.tauS), tauC: Math.max(0, sys.tauC) };
   return { tauS: sys.totalLatency * sys.latencySplit, tauC: sys.totalLatency * (1 - sys.latencySplit) };
+}
+
+/** Pad or trim drone configs to n. */
+export function dronesFor(cfg: SimConfig, n: number): DroneConfig[] {
+  const out = cfg.drones.slice(0, n);
+  while (out.length < n) out.push(defaultDrone(out.length));
+  return out;
 }
 
 /** Deep clone of a config (plain JSON data). */
