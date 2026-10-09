@@ -56,7 +56,20 @@ Node 20.19+ or 22.12+ is required (Vite 7). There is no backend: the build is a 
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Screenshots are in [`docs/screenshots/`](docs/screenshots/).
+![Two drones racing the C9 figure-8 ring circuit under the Nash plan, with the Race tab](docs/screenshots/hero-ring-race.jpg)
+
+| | |
+| --- | --- |
+| ![FPV view with the fisheye lens](docs/screenshots/fpv.jpg) | ![T5 intersection: downwash ellipsoids and the Safety tab](docs/screenshots/safety-filter.jpg) |
+| **FPV** (V): first person from the followed drone, slight fisheye. | **Safety filter** on T5: ellipsoids, separation line, s(t), corrections and the barrier value. |
+| ![Payoff matrix on T9](docs/screenshots/payoff-matrix.jpg) | ![Milestone 2 guide with the CBF worked example](docs/screenshots/milestone2-guide.jpg) |
+| **Game tab**: payoff of drone A over 14 × 14 valid candidate pairs, best replies, Nash cells, Stackelberg stars. | **Milestone 2 guide**: the CBF worked example computed live by the core. |
+| ![Race series results](docs/screenshots/results-race-series.jpg) | ![Course editor on C10](docs/screenshots/course-editor.jpg) |
+| **Results, M3**: Holm-corrected statements, win rates with Wilson intervals, radar per condition. | **Course editor** (E): live validation, racing line with A* detours, sequence editing. |
+| ![Obstacle forest in the light theme](docs/screenshots/light-forest.jpg) | |
+| **Light theme**, T13 obstacle forest from the top view. | |
+
+(Screenshots from software WebGL in a headless browser; the numbers in them are simulation results.)
 
 ## Controls
 
