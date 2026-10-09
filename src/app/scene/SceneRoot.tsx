@@ -44,6 +44,8 @@ function SceneContent({ dark }: { dark: boolean }) {
   const config = useStore((s) => s.config);
   const hoverCell = useStore((s) => s.hoverCell);
   const plan = useStore((s) => s.plan);
+  // FPV looks out of the followed drone: hide its own body and overlays around the lens
+  const selfIdx = useStore((s) => (s.camera === 'fpv' ? s.followIndex : -1));
   const build = engine.build;
   const arena = build?.arena ?? config.arena;
   const bg = dark ? '#070b14' : '#e8eef5';
@@ -66,8 +68,8 @@ function SceneContent({ dark }: { dark: boolean }) {
       {hoverPreviews?.map((p, i) => (p ? <Polyline key={`hv${i}`} pts={p} color={colors[i]} width={2.5} opacity={0.8} /> : null))}
       {Array.from({ length: n }, (_, i) => (
         <group key={`d${i}`}>
-          <DroneActor index={i} color={colors[i]} scale={visuals.exaggerate} />
-          <DroneOverlays index={i} color={colors[i]} ghosts={visuals.ghosts} ellipsoid={visuals.ellipsoids && n > 1} arrow={visuals.arrows} label={visuals.labels} scale={visuals.exaggerate} />
+          {i !== Math.min(selfIdx, n - 1) && <DroneActor index={i} color={colors[i]} scale={visuals.exaggerate} />}
+          {i !== Math.min(selfIdx, n - 1) && <DroneOverlays index={i} color={colors[i]} ghosts={visuals.ghosts} ellipsoid={visuals.ellipsoids && n > 1} arrow={visuals.arrows} label={visuals.labels} scale={visuals.exaggerate} />}
           {visuals.trails && <Trail getPoints={() => engine.trailPoints(i, visuals.trailLength)} color={colors[i]} colorBy={visuals.trailColor} vmax={vmax} background={bg} />}
         </group>
       ))}

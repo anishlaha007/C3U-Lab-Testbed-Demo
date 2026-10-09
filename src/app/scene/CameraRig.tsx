@@ -10,7 +10,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { gateFrame } from '../../core/course';
 import { engine } from '../engine';
 import { useStore } from '../store';
-import { toThreeVec } from './frames';
+import { LABEL_LAYER, toThreeVec } from './frames';
 
 const tmpPos = new THREE.Vector3();
 const tmpLook = new THREE.Vector3();
@@ -22,21 +22,45 @@ export function CameraRig() {
   const controls = useRef<OrbitControlsImpl>(null);
   const look = useRef(new THREE.Vector3(0, 1, 0));
   const cine = useRef({ gate: -2, pos: new THREE.Vector3(5, 3, 5), lastCut: 0, idx: 0 });
+  // the user's orbit view, saved when leaving orbit and flown back to on return (otherwise the
+  // camera would stay wherever FPV or chase left it, e.g. inside a drone)
+  const orbitPose = useRef({ pos: new THREE.Vector3(5.5, 4.2, 6.5), target: new THREE.Vector3(0, 1, 0) });
+  const prevMode = useRef(camera);
+  const returning = useRef<{ t: number } | null>(null);
 
   useEffect(() => {
     const persp = cam as THREE.PerspectiveCamera;
     persp.fov = camera === 'fpv' ? 100 : camera === 'chase' ? 70 : 45;
     persp.near = camera === 'fpv' ? 0.01 : 0.02;
     persp.updateProjectionMatrix();
-    if (camera === 'orbit' && controls.current) {
-      controls.current.target.copy(look.current);
-      controls.current.update();
+    if (camera === 'fpv') cam.layers.disable(LABEL_LAYER);
+    else cam.layers.enable(LABEL_LAYER);
+    const prev = prevMode.current;
+    if (prev === 'orbit' && camera !== 'orbit' && controls.current) {
+      orbitPose.current.pos.copy(cam.position);
+      orbitPose.current.target.copy(controls.current.target);
     }
+    if (camera === 'orbit' && prev !== 'orbit') returning.current = { t: 0 };
+    prevMode.current = camera;
   }, [camera, cam]);
 
   useFrame((_, dt) => {
     if (camera === 'orbit') {
-      if (controls.current) look.current.copy(controls.current.target);
+      const c = controls.current;
+      const r = returning.current;
+      if (c && r) {
+        r.t += dt;
+        const k = 1 - Math.exp(-dt * 6);
+        cam.position.lerp(orbitPose.current.pos, k);
+        c.target.lerp(orbitPose.current.target, k);
+        if (r.t > 1.5 || cam.position.distanceTo(orbitPose.current.pos) < 0.01) {
+          cam.position.copy(orbitPose.current.pos);
+          c.target.copy(orbitPose.current.target);
+          returning.current = null;
+        }
+        c.update();
+      }
+      if (c) look.current.copy(c.target);
       return;
     }
     const view = engine.view();

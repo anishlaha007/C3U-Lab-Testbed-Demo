@@ -7,7 +7,7 @@ import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { DRONE_NAMES, ELLIPSOID_RADII } from '../../core/constants';
 import { engine } from '../engine';
-import { toThreeVec, writeThree } from './frames';
+import { toThreeVec, writeThree, onLabelLayer } from './frames';
 import { labelTexture, textTexture } from './textures';
 
 const tmp = new THREE.Vector3();
@@ -106,7 +106,7 @@ export function DroneOverlays({ index, color, ghosts, ellipsoid, arrow, label, s
         <sphereGeometry args={[1, 16, 12]} />
         <meshBasicMaterial ref={pulseMat} color="#fde047" transparent opacity={0} depthWrite={false} toneMapped={false} />
       </mesh>
-      <sprite ref={labelRef} scale={[0.09, 0.09, 0.09]} visible={false}>
+      <sprite ref={labelRef} scale={[0.09, 0.09, 0.09]} visible={false} onUpdate={onLabelLayer}>
         <spriteMaterial map={tex} depthTest={false} depthWrite={false} />
       </sprite>
     </group>
@@ -161,7 +161,7 @@ export function SeparationLine() {
   return (
     <group>
       <primitive object={lineObj} ref={line} />
-      <sprite ref={sprite} visible={false}>
+      <sprite ref={sprite} visible={false} onUpdate={onLabelLayer}>
         <spriteMaterial ref={mat} depthTest={false} depthWrite={false} />
       </sprite>
     </group>

@@ -9,7 +9,7 @@ import { gateFrame, GATE_TUBE_R, LEG_SPAN, pendulumState, POLE_R, sliderState } 
 import type { Course, Gate, Obstacle } from '../../core/types';
 import type { Vec3 } from '../../core/vec';
 import { engine } from '../engine';
-import { toThreeVec } from './frames';
+import { toThreeVec, onLabelLayer } from './frames';
 import { hazardTexture, labelTexture } from './textures';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -120,7 +120,7 @@ function GateMesh({ gate, index, number, ceiling }: { gate: Gate; index: number;
         [1, 2].map((k) => <Tube key={`cab${k}`} a={f.verts[k]} b={{ x: f.verts[k].x, y: f.verts[k].y, z: ceiling }} r={0.004} color="#cbd5e1" />)
       )}
       {/* number badge above the gate */}
-      <sprite position={toThreeVec({ x: top.x, y: top.y, z: top.z + 0.16 })} scale={[0.2, 0.2, 0.2]}>
+      <sprite position={toThreeVec({ x: top.x, y: top.y, z: top.z + 0.16 })} scale={[0.2, 0.2, 0.2]} onUpdate={onLabelLayer}>
         <spriteMaterial map={tex} depthWrite={false} />
       </sprite>
     </group>

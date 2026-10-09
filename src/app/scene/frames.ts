@@ -5,6 +5,13 @@
 import * as THREE from 'three';
 import type { Vec3 } from '../../core/vec';
 
+/**
+ * Render layer of text labels (drone names, gate numbers, separation readout). The camera rig turns
+ * it off in FPV, where labels next to the lens would fill the view.
+ */
+export const LABEL_LAYER = 1;
+export const onLabelLayer = (o: THREE.Object3D): void => o.layers.set(LABEL_LAYER);
+
 /** Core (z-up) point -> three.js (y-up) tuple: [x, z, -y]. */
 export function toThree(p: Vec3): [number, number, number] {
   return [p.x, p.z, -p.y];
