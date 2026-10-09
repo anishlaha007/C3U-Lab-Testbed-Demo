@@ -11,7 +11,7 @@
 import { ARENA_MARGIN, DRONE_RADIUS } from '../constants';
 import { gateCrossing, gateFrame, isDynamic, obstaclePrimitives } from '../course';
 import { distanceToPrimitive } from '../geometry';
-import { raceKey, raceSetup, type RaceSetup } from '../race';
+import { raceKey, raceSetup, slotOptions, type RaceSetup } from '../race';
 import { sampleTrajectory } from '../trajectories/common';
 import type { GateVisit, SimConfig, Trajectory } from '../types';
 import { buildCandidate, candidateSpecs } from './candidates';
@@ -104,7 +104,7 @@ export function solvePlan(cfg: SimConfig, opts: SolveOptions = {}): PlanResult {
         setup.droneTracks[d],
         spec,
         setup.limits[d],
-        { startLateral: setup.starts[d].lateral, startS: setup.starts[d].s, laps: setup.laps, obstacles: setup.obstacles, clearance: DRONE_RADIUS + 0.06, droneId: d },
+        { ...slotOptions(setup, d), obstacles: setup.obstacles, clearance: DRONE_RADIUS + 0.06, droneId: d },
         k,
       );
       if (cand.valid && !insideArena(traj, arena)) cand.valid = false;

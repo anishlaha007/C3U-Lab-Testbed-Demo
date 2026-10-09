@@ -18,6 +18,13 @@ import { v3, type Vec3 } from './vec';
 export interface StartSlot {
   lateral: number;
   s: number;
+  /**
+   * Where the drone parks after the race: its lane (lateral offset, m) and, on open tracks, how far
+   * before the end of the track (m, rows behind stop earlier). Distinct for every drone so that
+   * drones do not all stop on the same point once the race is over.
+   */
+  endLateral: number;
+  endBack: number;
 }
 
 export interface RaceSetup {
@@ -77,7 +84,7 @@ export function startSlots(n: number, closed: boolean, swap: boolean, stagger = 
     let side = i % 2 === 0 ? 0.3 : -0.3;
     if (swap) side = -side;
     if (n === 1) side = 0;
-    slots.push({ lateral: side, s: -0.8 * row + (i === 0 ? stagger : 0) });
+    slots.push({ lateral: side, s: -0.8 * row + (i === 0 ? stagger : 0), endLateral: side, endBack: closed ? 0 : 0.8 * row });
   }
   if (!closed) {
     const minS = Math.min(...slots.map((s) => s.s));
@@ -209,6 +216,19 @@ export function raceSetup(cfg: SimConfig): RaceSetup | null {
   return setup;
 }
 
+/** Candidate options that place drone d on its start slot and end it at rest in its own lane. */
+export function slotOptions(setup: RaceSetup, d: number): { startLateral: number; startS: number; laps: number; endLateral: number; total?: number } {
+  const st = setup.starts[d];
+  const tr = setup.droneTracks[d];
+  return {
+    startLateral: st.lateral,
+    startS: st.s,
+    laps: setup.laps,
+    endLateral: st.endLateral,
+    total: tr.closed ? undefined : Math.max(0.5, tr.length - st.s - st.endBack),
+  };
+}
+
 /** Default (unsolved) race trajectories: every drone flies the centreline at full speed. */
 export function defaultRaceTrajectories(setup: RaceSetup): Trajectory[] {
   return setup.droneTracks.map(
@@ -217,7 +237,7 @@ export function defaultRaceTrajectories(setup: RaceSetup): Trajectory[] {
         tr,
         { lateral: [0, 0, 0, 0], vertical: [], speed: 1 },
         setup.limits[i],
-        { startLateral: setup.starts[i].lateral, startS: setup.starts[i].s, laps: setup.laps, droneId: i, label: 'centreline@100%' },
+        { ...slotOptions(setup, i), droneId: i, label: 'centreline@100%' },
       ).traj,
   );
 }

@@ -128,8 +128,10 @@ Non-obvious choices made while building the simulator, with the reason for each.
   out of the win rates.
 - Candidates leaving the geofence are invalid; open (non-loop) courses end with the drone clamped 0.9 m
   inside the arena.
-- **Finish in lanes, at rest.** On closed courses every candidate ends at rest on the drone's own start
-  slot (same arc length and lane), blended in over the last 1.5 m. The finish is the last gate pass,
+- **Finish in lanes, at rest.** Every candidate ends at rest in the drone's own lane: on closed courses on
+  its own start slot (same arc length and lane), on open tracks in its lane with rows behind stopping
+  0.8 m earlier, blended in over the last 1.5 m. On open tracks (the pinch) every Independent plan used to
+  end both drones on the same point and trigger an emergency brake after the race. The finish is the last gate pass,
   which comes before this run-in, so race results are unaffected. Before, all drones crossed the line at
   full speed and the reference then stopped dead on the same point, so every race ended with the filter
   separating the drones at the line (and the validator warned about it on every ring-course run).

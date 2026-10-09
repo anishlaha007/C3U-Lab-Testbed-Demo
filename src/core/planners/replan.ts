@@ -58,7 +58,8 @@ export function replanFromState(cfg: SimConfig, setup: RaceSetup, drones: Replan
   const remainingOf: number[] = [];
   for (let d = 0; d < n; d++) {
     const dr = drones[d];
-    const remaining = raceLength - dr.progress;
+    // open tracks: stop where this drone parks (rows behind park earlier)
+    const remaining = raceLength - dr.progress - (setup.track.closed ? 0 : setup.starts[d].endBack);
     remainingOf.push(remaining);
     if (!dr.active || remaining < 1.0) {
       trajs.push([]);
@@ -78,7 +79,7 @@ export function replanFromState(cfg: SimConfig, setup: RaceSetup, drones: Replan
         tr,
         spec,
         setup.limits[d],
-        { startLateral: lat, endLateral: tr.closed ? setup.starts[d].lateral : undefined, startS: sOwn, laps: 1, total: remaining, v0: Math.max(0.2, v0), obstacles: setup.obstacles, clearance: DRONE_RADIUS + 0.06, droneId: d, startBlend: 1.0 },
+        { startLateral: lat, endLateral: setup.starts[d].endLateral, startS: sOwn, laps: 1, total: remaining, v0: Math.max(0.2, v0), obstacles: setup.obstacles, clearance: DRONE_RADIUS + 0.06, droneId: d, startBlend: 1.0 },
         k,
       );
       let ok = cand.valid && insideArena(traj, arena);
