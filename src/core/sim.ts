@@ -20,7 +20,7 @@ import { OUWind, batteryTwr, makeDroneState, startFalling, stepDrone, type Drone
 import { Executor } from './executor';
 import { distanceToPrimitive, nearBounds, primitiveBounds, type Primitive } from './geometry';
 import { OnboardController } from './onboard';
-import { computePlanned } from './planned';
+import { computePlanned, plannedEffortUpTo } from './planned';
 import { ProgressTracker } from './planners/track';
 import { deriveSeed, Rng } from './rng';
 import { pairD, scaledSeparation } from './safety/ecbf';
@@ -884,6 +884,29 @@ export class Simulation {
       };
     });
     this.event('end', { detail: S.endReason });
+  }
+
+  /**
+   * Provisional copy of the log for live scoring before the trial ends: accumulators (effort,
+   * path length, laps, gates) are filled from the running state.
+   */
+  liveLog(): TrialLog {
+    if (this.done) return this.log;
+    const S = this.log.summary;
+    return {
+      ...this.log,
+      summary: {
+        ...S,
+        raceEnd: Math.min(this.raceEnd, this.t),
+        effort: this.drones.map((d) => d.effort),
+        pathLength: this.drones.map((d) => d.pathLength),
+        lapTimes: this.drones.map((d) => d.lapTimes.slice()),
+        lapsCompleted: this.drones.map((d) => d.lapTimes.length),
+        peakBraking: this.drones.map((d) => d.peakBraking),
+        gates: this.drones.map((d) => ({ passes: d.passes, misses: d.misses, strikes: d.strikes, attempted: d.passes + d.misses + d.strikes, finishTime: d.finishTime, passTimes: d.passTimes.slice() })),
+      },
+      planned: { ...this.log.planned, effort: this.log.planned.effort.map((_, i) => plannedEffortUpTo(this.build.trajectories[i], this.build.k, this.t)) },
+    };
   }
 
   /** Latest filter result (for the UI). */

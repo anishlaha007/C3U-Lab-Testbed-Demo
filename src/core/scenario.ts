@@ -26,6 +26,8 @@ export interface ScenarioBuild {
   prediction?: { gap: number; winner: number };
   /** Racing-line length (M27). */
   lineLength: number;
+  /** Raw obstacle-detour search paths (teaching view). */
+  searchPaths?: Vec3[][];
   notes: string[];
 }
 
@@ -119,6 +121,7 @@ export function buildScenario(cfg: SimConfig, ov: BuildOverrides = {}): Scenario
     lapPlanes,
     prediction: ov.prediction ?? base?.prediction,
     lineLength: base?.lineLength ?? (track ? track.length : 0),
+    searchPaths: base?.searchPaths,
     notes: base?.notes ?? [],
   };
 }

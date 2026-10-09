@@ -69,8 +69,9 @@ export function gateFactor(log: TrialLog, isCourse: boolean): { G: number; reaso
 }
 
 /** Speed sub-score for drone i. */
-export function speedScore(log: TrialLog, i: number, tr: TrackingMetrics): number {
+export function speedScore(log: TrialLog, i: number, tr: TrackingMetrics, provisional = false): number {
   if (Number.isFinite(tr.lapTime) && Number.isFinite(tr.plannedLapTime) && tr.lapTime > 0) return Math.min(1, tr.plannedLapTime / tr.lapTime);
+  if (provisional) return scheduleScore(log, i);
   const g = log.summary.gates[i];
   if (g && g.attempted > 0) {
     if (Number.isFinite(g.finishTime) && log.planned.duration > 0) return Math.min(1, log.planned.duration / g.finishTime);
@@ -90,14 +91,33 @@ export function speedScore(log: TrialLog, i: number, tr: TrackingMetrics): numbe
   return arr.covered;
 }
 
-export function evaluateTrial(log: TrialLog, weights: Weights = EQUAL_WEIGHTS): TrialEvaluation {
+/**
+ * Provisional speed score during a running trial: being e_along metres behind the reference at
+ * speed v is a schedule lag of e_along / v seconds, so V ~ t / (t + lag).
+ */
+export function scheduleScore(log: TrialLog, i: number): number {
+  const d = log.drones[i];
+  const k = d.px.length - 1;
+  if (k < 1) return 1;
+  const vx = d.rvx[k];
+  const vy = d.rvy[k];
+  const vz = d.rvz[k];
+  const vn = Math.hypot(vx, vy, vz);
+  if (vn < 0.05) return 1;
+  const along = ((d.px[k] - d.rx[k]) * vx + (d.py[k] - d.ry[k]) * vy + (d.pz[k] - d.rz[k]) * vz) / vn;
+  const lag = Math.max(0, -along) / vn;
+  const t = log.t[k];
+  return t > 0 ? Math.min(1, t / (t + lag)) : 1;
+}
+
+export function evaluateTrial(log: TrialLog, weights: Weights = EQUAL_WEIGHTS, provisional = false): TrialEvaluation {
   const isCourse = log.summary.gates.some((g) => g.attempted > 0);
   const tracking = log.drones.map((_, i) => trackingMetrics(log, i));
   const safety = safetyMetrics(log);
   const course = courseMetrics(log);
   const effort = effortMetrics(log);
   const perDrone = tracking.map((tr, i) => ({
-    V: speedScore(log, i, tr),
+    V: speedScore(log, i, tr, provisional),
     A: Number.isFinite(tr.rmse) ? Math.max(0, 1 - tr.rmse / 0.3) : 0,
     E: Number.isFinite(effort.ratio[i]) ? Math.min(1, effort.ratio[i]) : 0,
   }));

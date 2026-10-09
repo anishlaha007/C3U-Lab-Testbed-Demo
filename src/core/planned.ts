@@ -22,6 +22,19 @@ export function plannedEffort(tr: Trajectory, k: number): number {
   return s;
 }
 
+/** Planned effort up to race time t (scaled), for provisional live scoring. */
+export function plannedEffortUpTo(tr: Trajectory, k: number, tEnd: number): number {
+  let s = 0;
+  for (let i = 1; i < tr.t.length; i++) {
+    if (tr.t[i] / k > tEnd) break;
+    const dt = (tr.t[i] - tr.t[i - 1]) / k;
+    const f0 = Math.hypot(tr.ax[i - 1] * k * k, tr.ay[i - 1] * k * k, tr.az[i - 1] * k * k + G);
+    const f1 = Math.hypot(tr.ax[i] * k * k, tr.ay[i] * k * k, tr.az[i] * k * k + G);
+    s += 0.5 * (f0 + f1) * dt;
+  }
+  return s;
+}
+
 /** Minimum scaled separation between planned trajectories (unit margin), sampled at 100 Hz. */
 export function minPlannedSeparation(trajs: Trajectory[], k: number, marginMultiplier = 1): { min: number; t: number; i: number; j: number } {
   const D = pairD(marginMultiplier);
