@@ -12,9 +12,10 @@ Checklist of the build phases (Section 14 of the build prompt).
   - [x] sweep worker pool with progress and cancel; M15 cost of safety for recorded trials
   - [x] Results tab (M1 / M2 / M3 experiment charts with CIs, Wilson intervals, Holm-corrected statements, radar and ranking stability, recorded trials with weights, CSV / JSON export)
   - [x] guided milestone narration (M1, M2, M3) and Scorecard mode (interactive weights and gates, worked examples computed live)
-- [ ] Phase 7: polish and ship
+- [x] Phase 7: polish and ship
   - [x] README (controls, presets, mapping onto the ROS 2 testbed, deploy), docs/MODEL.md, DECISIONS.md
   - [x] vendor chunk splitting, one-row responsive top bar, FPV fisheye lens, trail speed legend, chart fixes
   - [x] CI (test + build) and a manual GitHub Pages deploy workflow
-  - [ ] screenshots in docs/screenshots
-  - [ ] final end-to-end pass of every preset and guided mode
+  - [x] screenshots in docs/screenshots (eight views, linked from the README)
+  - [x] final end-to-end pass: all 14 presets load and fly in the production build with zero console errors; M1 / M2 / M3 / Scorecard guided modes and every experiment kind run to completion
+  - [x] adversarial review of the core (safety filter, scoring windows, re-planning, CSV import); fixes and regression tests in `src/tests/regressions.test.ts`, findings that were intended behaviour documented as decisions in DECISIONS.md
