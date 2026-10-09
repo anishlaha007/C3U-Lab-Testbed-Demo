@@ -128,12 +128,23 @@ Non-obvious choices made while building the simulator, with the reason for each.
   out of the win rates.
 - Candidates leaving the geofence are invalid; open (non-loop) courses end with the drone clamped 0.9 m
   inside the arena.
+- **Finish in lanes, at rest.** On closed courses every candidate ends at rest on the drone's own start
+  slot (same arc length and lane), blended in over the last 1.5 m. The finish is the last gate pass,
+  which comes before this run-in, so race results are unaffected. Before, all drones crossed the line at
+  full speed and the reference then stopped dead on the same point, so every race ended with the filter
+  separating the drones at the line (and the validator warned about it on every ring-course run).
+- **Braking keeps a 5% margin** in the speed profile's backward pass: the piecewise-constant deceleration
+  between path samples overshot the thrust budget by about 1% at a full stop, which made the feasibility
+  check time-scale the whole trajectory (and shifted its timing against the moving obstacles of C7).
 
 ## Experiments (Section 12)
 
 - **Margin sweep adds a 0.15 m obstacle-margin level** to the spec's (0.03, 0.05, 0.10). The racing lines
   keep about 0.17 m from obstacles, so obstacle margins up to 0.10 m barely bind on C6; the gate margin is
   what blocks legal passes (C5 pass rate 100% → 75% → 25% at gate margins 0.05 → 0.10 → 0.15 m).
+- **Run time.** Measured single-threaded: M1 ≈ 2 s, M2 safety ≈ 12 s, margins ≈ 30 s, scaling ≈ 3 s, race
+  series ≈ 190 s (480 races, each with a game solve). On the worker pool this is about a minute on a
+  4-core laptop and half that on 8 cores; quick mode runs the race series in about 20 s.
 - **Quick demo** mode cuts trial counts (M1 3 per level, M2 1, M3 10 races per condition) so every
   experiment finishes in seconds to about a minute; the full counts follow the spec.
 - **M15 cost of safety** is computed by flying each drone's trajectory alone with the same seed and

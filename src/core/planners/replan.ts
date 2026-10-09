@@ -78,7 +78,7 @@ export function replanFromState(cfg: SimConfig, setup: RaceSetup, drones: Replan
         tr,
         spec,
         setup.limits[d],
-        { startLateral: lat, startS: sOwn, laps: 1, total: remaining, v0: Math.max(0.2, v0), stopAtEnd: !tr.closed, obstacles: setup.obstacles, clearance: DRONE_RADIUS + 0.06, droneId: d, startBlend: 1.0 },
+        { startLateral: lat, endLateral: tr.closed ? setup.starts[d].lateral : undefined, startS: sOwn, laps: 1, total: remaining, v0: Math.max(0.2, v0), obstacles: setup.obstacles, clearance: DRONE_RADIUS + 0.06, droneId: d, startBlend: 1.0 },
         k,
       );
       let ok = cand.valid && insideArena(traj, arena);

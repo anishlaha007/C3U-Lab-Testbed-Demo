@@ -50,8 +50,18 @@ export interface CandidateOptions {
   total?: number;
   /** Initial speed (m/s); default: flying start at the cruise cap. */
   v0?: number;
-  /** End at rest (open tracks always do). */
+  /**
+   * End at rest (default). false: cross the end at cruise speed (the reference then stops dead,
+   * so only use it when something else follows).
+   */
   stopAtEnd?: boolean;
+  /**
+   * Lateral offset at the end of the path (m), blended in over the last `startBlend` metres.
+   * Default on closed tracks: the drone's start lane, so after the race every drone parks on its
+   * own start slot (the finish is the last gate pass, before this run-in) instead of all drones
+   * stopping on the same point of the line.
+   */
+  endLateral?: number;
 }
 
 /** Smooth periodic (closed) or clamped (open) interpolation of K control values across [0, L]. */
@@ -83,6 +93,7 @@ export function candidatePath(track: Track, spec: CandidateSpec, opts: Candidate
   const ds = 0.05;
   const n = Math.max(3, Math.round(total / ds) + 1);
   const blend = opts.startBlend ?? Math.min(1.5, 0.3 * L);
+  const endLateral = opts.endLateral ?? (track.closed ? opts.startLateral : undefined);
   const pts: Vec3[] = [];
   for (let k = 0; k < n; k++) {
     const sRel = (k / (n - 1)) * total;
@@ -96,6 +107,11 @@ export function candidatePath(track: Track, spec: CandidateSpec, opts: Candidate
     if (sRel < blend) {
       const f = 0.5 - 0.5 * Math.cos((Math.PI * sRel) / blend);
       lat = opts.startLateral + (lat - opts.startLateral) * f;
+    }
+    // and from the profile into the end lane
+    if (endLateral !== undefined && total - sRel < blend) {
+      const f = 0.5 - 0.5 * Math.cos((Math.PI * (total - sRel)) / blend);
+      lat = endLateral + (lat - endLateral) * f;
     }
     const vert = vprof * fr.h;
     pts.push(v3(fr.p.x + fr.l.x * lat + fr.u.x * vert, fr.p.y + fr.l.y * lat + fr.u.y * vert, fr.p.z + fr.l.z * lat + fr.u.z * vert));
@@ -166,8 +182,10 @@ export function speedProfile(pts: Vec3[], ds: number, aMax: number, vCap: number
     if (opts.closed) v[0] = Math.min(v[0], v[n - 1]);
   }
   if (!opts.closed) v[n - 1] = Math.min(v[n - 1], opts.vEnd ?? 0);
+  // braking keeps a 5% margin: the piecewise-constant deceleration between samples overshoots the
+  // budget by about 1% at a full stop, which would otherwise time-scale the whole trajectory
   for (let p = 0; p < passes; p++) {
-    for (let i = n - 1; i > 0; i--) v[i - 1] = Math.min(v[i - 1], Math.sqrt(v[i] * v[i] + 2 * lon(v[i], kappa[i]) * ds));
+    for (let i = n - 1; i > 0; i--) v[i - 1] = Math.min(v[i - 1], Math.sqrt(v[i] * v[i] + 2 * 0.95 * lon(v[i], kappa[i]) * ds));
     if (opts.closed) v[n - 1] = Math.min(v[n - 1], v[0]);
   }
   return v.map((x) => Math.max(x, 0.05));
@@ -264,7 +282,7 @@ export function buildCandidate(track: Track, spec: CandidateSpec, lim: DroneLimi
   const raw = candidatePath(track, spec, opts);
   const { pts, ds } = resampleUniform(raw, 0.05);
   const aMax = planningAccel(lim);
-  const vProf = speedProfile(pts, ds, aMax, lim.vCap, { closed: false, v0: opts.v0 ?? lim.vCap, vEnd: track.closed && !opts.stopAtEnd ? lim.vCap : 0 });
+  const vProf = speedProfile(pts, ds, aMax, lim.vCap, { closed: false, v0: opts.v0 ?? lim.vCap, vEnd: opts.stopAtEnd === false ? lim.vCap : 0 });
   const scaled = vProf.map((x) => x * spec.speed);
   let traj = pathToTrajectory(pts, ds, scaled, defaultMeta({ drone_id: opts.droneId ?? 0, strategy: opts.label ?? candidateLabel(spec), solver: 'candidate', track_id: track.id }));
   // time-scale down until feasible
