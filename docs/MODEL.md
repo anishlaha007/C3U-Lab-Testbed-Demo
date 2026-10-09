@@ -1003,7 +1003,9 @@ times a speed scale:
   `value = c_i + (c_{i+1} − c_i)(½ − ½ cos πφ)` (periodic on closed tracks).
 - Offset point: `p = τ(s) + l · (profile · w(s)) + u · (vprofile · h(s))`, blended from the drone's start
   lateral offset over `min(1.5 m, 0.3 L)` with the same cosine blend, then two passes of a
-  `[¼, ½, ¼]` smoother.
+  `[¼, ½, ¼]` smoother. On closed tracks the profile is also blended, over the same length before the
+  end, into the drone's start lane, so each drone finishes at rest on its own start slot (the finish is
+  the last gate pass, which comes before this run-in).
 - Speed levels `{0.8, 0.85, 0.9, 0.95, 1.0}`.
 - The set of size `M` (default 30, maximum 80) always contains the centreline at full speed, then
   constant offsets (0, ∓0.5, ∓1) from the fastest level down (at most 15 structured members), then
@@ -1019,11 +1021,12 @@ a_max = √((η TWR g)² − g²)                                 (planningAccel
 v_max,i = min(v_cap, √(0.9 a_max / κ_i))                   (lateral limit with 10 % reserve)
 a_lon(v, κ) = √(max(0.05 a_max², a_max² − (v² κ)²))        (friction circle, floor ≈ 0.22 a_max)
 forward:   v_{i+1} ← min(v_{i+1}, √(v_i² + 2 a_lon(v_i, κ_i) ds))
-backward:  v_{i−1} ← min(v_{i−1}, √(v_i² + 2 a_lon(v_i, κ_i) ds))
+backward:  v_{i−1} ← min(v_{i−1}, √(v_i² + 2 · 0.95 a_lon(v_i, κ_i) ds))   (5 % braking margin)
 ```
 
-`v_cap` is the scenario's target speed. Candidates use the open form with `v_0 = v_cap` and an end speed of
-`v_cap` on closed tracks (the race continues) or 0 on open ones; the closed form wraps for 3 passes.
+`v_cap` is the scenario's target speed. Candidates use the open form with `v_0 = v_cap` and end at rest
+(open and closed tracks); the closed form wraps for 3 passes. The braking margin absorbs the ≈1 % overshoot
+of the piecewise-constant deceleration at a full stop, which would otherwise time-scale the whole candidate.
 Speeds are floored at 0.05 m/s and multiplied by the candidate's speed level.
 
 **Time parametrisation** (`pathToTrajectory`): constant acceleration per path segment, so
